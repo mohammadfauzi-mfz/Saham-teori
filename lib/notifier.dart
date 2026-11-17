@@ -1,20 +1,19 @@
+import 'dart:ui';
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:workmanager/workmanager.dart';
 import 'data.dart';
 import 'store.dart';
 
 final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
-const _taskName = 'portfolio_target_check';
+const _alarmId = 7001;
 
-/// Entry point dijalankan WorkManager di latar belakang (aplikasi tidak perlu dibuka).
+/// Entry point dijalankan AlarmManager di latar belakang (aplikasi tidak perlu dibuka).
 @pragma('vm:entry-point')
-void callbackDispatcher() {
-  Workmanager().executeTask((task, input) async {
-    try {
-      await Notifier.backgroundCheck();
-    } catch (_) {}
-    return true;
-  });
+Future<void> backgroundTarget() async {
+  DartPluginRegistrant.ensureInitialized();
+  try {
+    await Notifier.backgroundCheck();
+  } catch (_) {}
 }
 
 class Notifier {
@@ -26,7 +25,7 @@ class Notifier {
   /// Dipanggil sekali saat aplikasi mulai.
   static Future<void> init() async {
     await _initPlugin();
-    await Workmanager().initialize(callbackDispatcher);
+    await AndroidAlarmManager.initialize();
     if (await Store.notifOn()) await schedule();
   }
 
@@ -37,12 +36,11 @@ class Notifier {
   }
 
   static Future<void> schedule() async {
-    await Workmanager().registerPeriodicTask(_taskName, _taskName,
-        frequency: const Duration(minutes: 15),
-        constraints: Constraints(networkType: NetworkType.connected));
+    await AndroidAlarmManager.periodic(const Duration(minutes: 15), _alarmId, backgroundTarget,
+        wakeup: true, rescheduleOnReboot: true);
   }
 
-  static Future<void> cancel() async => Workmanager().cancelByUniqueName(_taskName);
+  static Future<void> cancel() async => AndroidAlarmManager.cancel(_alarmId);
 
   /// Aktif/nonaktifkan notifikasi + simpan target (% untung total portofolio).
   static Future<void> configure({required bool on, required double target}) async {

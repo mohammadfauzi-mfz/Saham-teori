@@ -55,7 +55,7 @@ else:
 
 m = manifest.read_text()
 perms = ''.join('    <uses-permission android:name="android.permission.%s"/>\n' % p for p in
-                ['INTERNET', 'POST_NOTIFICATIONS', 'REQUEST_INSTALL_PACKAGES'])
+                ['INTERNET', 'POST_NOTIFICATIONS', 'REQUEST_INSTALL_PACKAGES', 'RECEIVE_BOOT_COMPLETED', 'WAKE_LOCK'])
 m = m.replace('<application', perms + '    <application', 1)
 m = re.sub(r'android:label="[^"]*"', 'android:label="Saham Teori"', m, count=1)
 manifest.write_text(m)
