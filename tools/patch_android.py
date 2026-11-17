@@ -24,7 +24,7 @@ if kts.exists():
 
 '''
     if 'buildTypes {' not in s: die('buildTypes tidak ditemukan (kts)')
-    s = s.replace('buildTypes {', sign + '    buildTypes {', 1)
+    s = s.replace('buildTypes {', '    lint {\n        checkReleaseBuilds = false\n        abortOnError = false\n    }\n\n' + sign + '    buildTypes {', 1)
     s, n = re.subn(r'signingConfig\s*=\s*signingConfigs\.getByName\("debug"\)', 'signingConfig = signingConfigs.getByName("release")', s)
     if n != 1: die('signingConfig debug tidak ditemukan (kts)')
     s += '\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
@@ -44,7 +44,7 @@ elif grv.exists():
 
 '''
     if 'buildTypes {' not in s: die('buildTypes tidak ditemukan (groovy)')
-    s = s.replace('buildTypes {', sign + '    buildTypes {', 1)
+    s = s.replace('buildTypes {', '    lint {\n        checkReleaseBuilds false\n        abortOnError false\n    }\n\n' + sign + '    buildTypes {', 1)
     s, n = re.subn(r'signingConfig\s+signingConfigs\.debug', 'signingConfig signingConfigs.release', s)
     if n != 1: die('signingConfig debug tidak ditemukan (groovy)')
     s += '\ndependencies {\n    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"\n}\n'
