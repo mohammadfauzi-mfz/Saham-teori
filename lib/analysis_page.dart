@@ -31,6 +31,10 @@ class AnalysisPageState extends State<AnalysisPage> {
   double off = 0;
   int? cross;
   double chartW = 300;
+  final Map<int, Offset> _ptrs = {};
+  double _pinchDist = 0;
+  int _pinchBase = 120;
+  bool pinching = false;
   bool oMA = true, oBB = true, oSR = true;
   bool pVol = true, pRSI = true, pMACD = true, pStoch = false, pADX = false;
   bool inWatch = false;
@@ -71,9 +75,9 @@ class AnalysisPageState extends State<AnalysisPage> {
         sigs = s;
         reco = recommend(d, i, s);
         sr = srLevels(i);
-        off = 0;
-        cross = null;
         count = math.min(120, d.length);
+        off = -(count * 0.15);
+        cross = null;
         inWatch = w.contains(code);
       });
     } catch (e) {
@@ -441,18 +445,48 @@ class AnalysisPageState extends State<AnalysisPage> {
         ],
       );
 
-  void zoom(double f) {
-    final n = data.length;
-    setState(() {
-      count = (count * f).round().clamp(30, n).toInt();
-      off = off.clamp(0.0, (n - count).toDouble()).toDouble();
-    });
+  double _clampOff(double v) {
+    final lo = -count * 0.5; // boleh digeser melewati candle terakhir (ruang kosong kanan)
+    final hi = math.max(lo, (data.length - count).toDouble());
+    return v.clamp(lo, hi).toDouble();
+  }
+
+  void _setCount(int c) {
+    count = c.clamp(20, data.length).toInt();
+    off = _clampOff(off);
+  }
+
+  void zoom(double f) => setState(() => _setCount((count * f).round()));
+
+  void _ptrDown(PointerDownEvent e) {
+    _ptrs[e.pointer] = e.localPosition;
+    if (_ptrs.length == 2) {
+      final p = _ptrs.values.toList();
+      _pinchDist = (p[0] - p[1]).distance;
+      _pinchBase = count;
+      setState(() => pinching = true);
+    }
+  }
+
+  void _ptrMove(PointerMoveEvent e) {
+    if (!_ptrs.containsKey(e.pointer)) return;
+    _ptrs[e.pointer] = e.localPosition;
+    if (_ptrs.length == 2 && _pinchDist > 10) {
+      final p = _ptrs.values.toList();
+      final dist = (p[0] - p[1]).distance;
+      if (dist > 10) setState(() => _setCount((_pinchBase * _pinchDist / dist).round()));
+    }
+  }
+
+  void _ptrUp(PointerEvent e) {
+    _ptrs.remove(e.pointer);
+    if (_ptrs.length < 2 && pinching) setState(() => pinching = false);
   }
 
   Widget chartArea(Indicators i) {
     final n = data.length;
     final r = _range(n);
-    final idx = cross ?? (r[1] - 1);
+    final idx = (cross ?? (r[1] - 1)).clamp(0, n - 1).toInt();
     final c = data[idx];
     final info =
         '${fd(c.t)}  O ${f0(c.o)}  H ${f0(c.h)}  L ${f0(c.l)}  C ${f0(c.c)}  Vol ${rp(c.v)}';
@@ -468,23 +502,26 @@ class AnalysisPageState extends State<AnalysisPage> {
             onPressed: () => zoom(0.7),
             icon: const Icon(Icons.zoom_in)),
       ]),
-      const Text('Geser kiri/kanan untuk melihat riwayat • ketuk candle untuk crosshair • MA20 kuning, MA50 biru, MA200 oranye',
+      const Text('Geser kiri/kanan • cubit 2 jari untuk zoom • ketuk candle untuk crosshair • MA20 kuning, MA50 biru, MA200 oranye',
           style: TextStyle(fontSize: 10, color: Colors.white38)),
       LayoutBuilder(builder: (ctx, cons) {
         chartW = cons.maxWidth;
-        return GestureDetector(
+        return Listener(
+          onPointerDown: _ptrDown,
+          onPointerMove: _ptrMove,
+          onPointerUp: _ptrUp,
+          onPointerCancel: _ptrUp,
+          child: GestureDetector(
           onHorizontalDragUpdate: (d) {
+            if (pinching) return;
             final cw = chartW / count;
-            setState(() {
-              off = (off + d.delta.dx / cw).clamp(0.0, (n - count).toDouble()).toDouble();
-            });
+            setState(() => off = _clampOff(off + d.delta.dx / cw));
           },
           onTapUp: (d) {
             final rr = _range(n);
-            final cw = chartW / (rr[1] - rr[0]);
-            final k = rr[0] + (d.localPosition.dx / cw).floor();
-            final k2 = k.clamp(rr[0], rr[1] - 1).toInt();
-            setState(() => cross = cross == k2 ? null : k2);
+            final cw = chartW / count;
+            final k = (rr[0] + (d.localPosition.dx / cw).floor()).clamp(0, n - 1).toInt();
+            setState(() => cross = cross == k ? null : k);
           },
           child: SizedBox(
             height: 300,
@@ -503,7 +540,7 @@ class AnalysisPageState extends State<AnalysisPage> {
                   cross: cross),
             ),
           ),
-        );
+        ));
       }),
       if (pVol) panel('Volume', 60, VolPainter(data, count, offset)),
       if (pRSI)
@@ -527,9 +564,8 @@ class AnalysisPageState extends State<AnalysisPage> {
   }
 
   List<int> _range(int n) {
-    final end = (n - offset).clamp(1, n).toInt();
-    final st = math.max(0, end - count);
-    return [st, end];
+    final end = n - offset;
+    return [end - count, end];
   }
 
   @override
@@ -551,7 +587,10 @@ class AnalysisPageState extends State<AnalysisPage> {
         ],
       ),
       body: SafeArea(
-        child: ListView(padding: const EdgeInsets.all(12), children: [
+        child: ListView(
+            padding: const EdgeInsets.all(12),
+            physics: pinching ? const NeverScrollableScrollPhysics() : null,
+            children: [
           Row(children: [
             Expanded(
               child: TextField(

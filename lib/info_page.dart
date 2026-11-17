@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'updater.dart';
 
 const _items = <List<String>>[
   ['Dow Theory', 'Tren dikonfirmasi oleh puncak dan lembah yang makin tinggi.', 'Hijau jika pivot terakhir membentuk higher high dan higher low (swing 5%).'],
@@ -26,7 +27,7 @@ const _items = <List<String>>[
   ['Ascending Triangle', 'Resistance datar dengan dasar makin tinggi, rawan breakout.', 'Hijau jika dua high selisih <1,5%, dasar naik, dan harga ≥97% resistance.'],
   ['Relative Strength vs IHSG', 'Saham yang lebih kuat dari indeks cenderung memimpin.', 'Hijau jika return 60 candle terakhir lebih besar dari IHSG.'],
   ['Backtest', 'Menguji aturan pada data historis saham yang sedang dibuka.', 'Beli saat ≥60% teori teknikal hijau, jual saat <35%, stop 2 ATR, target 3 ATR, maks 40 candle, fee 0,4%. Hasil lalu tidak menjamin masa depan.'],
-  ['Portofolio & Alert', 'Catat posisi dan pantau harga.', 'Alert dicek saat Watchlist dibuka/disegarkan (bukan notifikasi latar belakang).'],
+  ['Portofolio & Alert', 'Catat posisi dan pantau harga.', 'Alert harga dicek saat Watchlist dibuka. Notifikasi target portofolio (ikon lonceng di Portofolio) dicek otomatis di latar belakang kira-kira tiap 15 menit.'],
   ['Harga Beli Ideal', 'Area di mana beberapa support bertemu (konfluensi).', 'Dari MA20/50/200, Bollinger, Fibonacci, swing low, awan Ichimoku. Zona ±0,5 ATR, stop 1 ATR di bawah zona, target dari swing high.'],
 ];
 
@@ -38,6 +39,13 @@ class InfoPage extends StatelessWidget {
       appBar: AppBar(title: const Text('Penjelasan Teori')),
       body: SafeArea(
         child: ListView(children: [
+          ListTile(
+            leading: const Icon(Icons.system_update),
+            title: const Text('Cek pembaruan aplikasi'),
+            subtitle: const Text('Unduh & pasang versi terbaru langsung dari dalam aplikasi'),
+            onTap: () => Updater.checkAndPrompt(context),
+          ),
+          const Divider(height: 1),
           for (final it in _items)
             ExpansionTile(
               title: Text(it[0]),

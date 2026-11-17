@@ -36,10 +36,10 @@ void _line(Canvas canvas, List<double> s, int st, int end, double Function(int) 
         ..strokeWidth = 1.2);
 }
 
+/// Rentang virtual [st, end). Jika offset negatif, end > n sehingga ada ruang kosong di kanan.
 List<int> _rng(int n, int count, int offset) {
-  final end = (n - offset).clamp(1, n).toInt();
-  final st = math.max(0, end - count);
-  return [st, end];
+  final end = n - offset;
+  return [end - count, end];
 }
 
 class PricePainter extends CustomPainter {
@@ -68,8 +68,9 @@ class PricePainter extends CustomPainter {
     final n = d.length;
     final r = _rng(n, count, offset);
     final st = r[0], end = r[1], cnt = end - st;
+    final lo = math.max(0, st), hi = math.min(n, end);
     var mn = double.infinity, mx = -double.infinity;
-    for (var i = st; i < end; i++) {
+    for (var i = lo; i < hi; i++) {
       mn = math.min(mn, d[i].l);
       mx = math.max(mx, d[i].h);
       if (oBB) {
@@ -81,7 +82,7 @@ class PricePainter extends CustomPainter {
         }
       }
     }
-    if (reco != null && offset == 0 && reco!.stop > mn * 0.88) mn = math.min(mn, reco!.stop);
+    if (reco != null && offset <= 0 && reco!.stop > mn * 0.88) mn = math.min(mn, reco!.stop);
     final pad = (mx - mn) * 0.03;
     mn -= pad;
     mx += pad;
@@ -119,10 +120,10 @@ class PricePainter extends CustomPainter {
       }
     }
     if (oBB) {
-      _line(canvas, ind.bbUp, st, end, x, y, Colors.grey);
-      _line(canvas, ind.bbLow, st, end, x, y, Colors.grey);
+      _line(canvas, ind.bbUp, lo, hi, x, y, Colors.grey);
+      _line(canvas, ind.bbLow, lo, hi, x, y, Colors.grey);
     }
-    for (var i = st; i < end; i++) {
+    for (var i = lo; i < hi; i++) {
       final up = d[i].c >= d[i].o;
       final col = up ? Colors.greenAccent : Colors.redAccent;
       final p = Paint()..color = col;
@@ -133,15 +134,15 @@ class PricePainter extends CustomPainter {
           p);
     }
     if (oMA) {
-      _line(canvas, ind.ma20, st, end, x, y, Colors.amber);
-      _line(canvas, ind.ma50, st, end, x, y, Colors.lightBlueAccent);
-      _line(canvas, ind.ma200, st, end, x, y, Colors.orangeAccent);
+      _line(canvas, ind.ma20, lo, hi, x, y, Colors.amber);
+      _line(canvas, ind.ma50, lo, hi, x, y, Colors.lightBlueAccent);
+      _line(canvas, ind.ma200, lo, hi, x, y, Colors.orangeAccent);
     }
-    for (final idx in {st, (st + end) ~/ 2, end - 1}) {
+    for (final idx in {lo, (lo + hi) ~/ 2, hi - 1}) {
       _txt(canvas, fd(d[idx].t), Offset(math.max(0, x(idx) - 20), size.height - 12));
     }
     final cr = cross;
-    if (cr != null && cr >= st && cr < end) {
+    if (cr != null && cr >= lo && cr < hi) {
       final p = Paint()
         ..color = Colors.white54
         ..strokeWidth = 1;
@@ -163,12 +164,13 @@ class VolPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final r = _rng(d.length, count, offset);
     final st = r[0], end = r[1], cnt = end - st;
+    final lo = math.max(0, st), hi = math.min(d.length, end);
     var mx = 1.0;
-    for (var i = st; i < end; i++) {
+    for (var i = lo; i < hi; i++) {
       mx = math.max(mx, d[i].v);
     }
     final cw = size.width / cnt;
-    for (var i = st; i < end; i++) {
+    for (var i = lo; i < hi; i++) {
       final up = d[i].c >= d[i].o;
       final hgt = size.height * d[i].v / mx;
       canvas.drawRect(
@@ -196,10 +198,11 @@ class SubPainter extends CustomPainter {
     final n = series.first.length;
     final r = _rng(n, count, offset);
     final st = r[0], end = r[1], cnt = end - st;
+    final lo = math.max(0, st), hi = math.min(n, end);
     var mn = fixMin ?? double.infinity, mx = fixMax ?? -double.infinity;
     if (fixMin == null) {
       for (final s in [...series, if (hist != null) hist!]) {
-        for (var i = st; i < end; i++) {
+        for (var i = lo; i < hi; i++) {
           if (!s[i].isNaN) {
             mn = math.min(mn, s[i]);
             mx = math.max(mx, s[i]);
@@ -220,7 +223,7 @@ class SubPainter extends CustomPainter {
     }
     if (hist != null) {
       canvas.drawLine(Offset(0, y(0)), Offset(size.width, y(0)), grid);
-      for (var i = st; i < end; i++) {
+      for (var i = lo; i < hi; i++) {
         final v = hist![i];
         if (v.isNaN) continue;
         canvas.drawRect(
@@ -229,7 +232,7 @@ class SubPainter extends CustomPainter {
       }
     }
     for (var k = 0; k < series.length; k++) {
-      _line(canvas, series[k], st, end, x, y, colors[k]);
+      _line(canvas, series[k], lo, hi, x, y, colors[k]);
     }
   }
 

@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import 'analysis_page.dart';
 import 'info_page.dart';
 import 'lists_pages.dart';
+import 'notifier.dart';
 import 'portfolio_page.dart';
 import 'store.dart';
+import 'updater.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Settings.load();
+  try {
+    await Notifier.init();
+  } catch (_) {}
   runApp(const App());
 }
 
@@ -34,6 +39,14 @@ class _ShellState extends State<Shell> {
   final ak = GlobalKey<AnalysisPageState>();
   final wk = GlobalKey<WatchlistPageState>();
   final pk = GlobalKey<PortfolioPageState>();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Updater.checkAndPrompt(context, silent: true);
+    });
+  }
 
   void open(String code) {
     setState(() => idx = 0);

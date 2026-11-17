@@ -105,4 +105,30 @@ class Store {
     final p = await SharedPreferences.getInstance();
     await p.setString('alerts', jsonEncode(l.map((e) => e.toJson()).toList()));
   }
+
+  // ---- Notifikasi target portofolio ----
+  static Future<bool> notifOn() async {
+    final p = await SharedPreferences.getInstance();
+    await p.reload();
+    return p.getBool('n_on') ?? false;
+  }
+
+  static Future<double> notifTarget() async {
+    final p = await SharedPreferences.getInstance();
+    await p.reload();
+    return p.getDouble('n_target') ?? 10.0;
+  }
+
+  static Future<bool> notifFired() async {
+    final p = await SharedPreferences.getInstance();
+    await p.reload();
+    return p.getBool('n_fired') ?? false;
+  }
+
+  static Future<void> setNotif({bool? on, double? target, bool? fired}) async {
+    final p = await SharedPreferences.getInstance();
+    if (on != null) await p.setBool('n_on', on);
+    if (target != null) await p.setDouble('n_target', target);
+    if (fired != null) await p.setBool('n_fired', fired);
+  }
 }

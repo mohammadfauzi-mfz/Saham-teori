@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'notifier.dart';
 import 'service.dart';
 import 'store.dart';
 import 'theories.dart';
@@ -36,6 +37,63 @@ class PortfolioPageState extends State<PortfolioPage> {
       if (mounted) setState(() {});
     }
     if (mounted) setState(() => loading = false);
+    var cost = 0.0, value = 0.0;
+    for (final h in hs) {
+      cost += h.lots * 100 * h.avg;
+      value += h.lots * 100 * (res[h.code]?.price ?? h.avg);
+    }
+    if (cost > 0 && res.isNotEmpty) await Notifier.evaluate((value - cost) / cost * 100);
+    nOn = await Store.notifOn();
+    nTarget = await Store.notifTarget();
+    if (mounted) setState(() {});
+  }
+
+  bool nOn = false;
+  double nTarget = 10;
+
+  Future<void> notifDialog() async {
+    var on = await Store.notifOn();
+    final tc = TextEditingController(text: (await Store.notifTarget()).toString());
+    if (!mounted) return;
+    final ok = await showDialog<bool>(
+        context: context,
+        builder: (_) => StatefulBuilder(
+            builder: (ctx, set) => AlertDialog(
+                  title: const Text('Notifikasi target portofolio'),
+                  content: Column(mainAxisSize: MainAxisSize.min, children: [
+                    SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Aktifkan notifikasi'),
+                        value: on,
+                        onChanged: (v) => set(() => on = v)),
+                    TextField(
+                        controller: tc,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(
+                            labelText: 'Target untung total portofolio (%)',
+                            border: OutlineInputBorder(),
+                            isDense: true)),
+                    const SizedBox(height: 8),
+                    const Text(
+                        'Kamu diberi tahu sekali saat total untung portofolio mencapai/melewati target, '
+                        'bahkan saat aplikasi ditutup (dicek ±tiap 15 menit; Android bisa menunda untuk hemat baterai).',
+                        style: TextStyle(fontSize: 11, color: Colors.white54)),
+                  ]),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+                    FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Simpan')),
+                  ],
+                )));
+    if (ok != true) return;
+    final t = double.tryParse(tc.text.trim().replaceAll(',', '.'));
+    if (t == null || t <= 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Target tidak valid')));
+      }
+      return;
+    }
+    await Notifier.configure(on: on, target: t);
+    await refresh();
   }
 
   Future<void> addDialog() async {
@@ -121,6 +179,11 @@ class PortfolioPageState extends State<PortfolioPage> {
     final plc = pl >= 0 ? Colors.greenAccent : Colors.redAccent;
     return Scaffold(
       appBar: AppBar(title: const Text('Portofolio'), actions: [
+        IconButton(
+            onPressed: notifDialog,
+            tooltip: 'Notifikasi target',
+            icon: Icon(nOn ? Icons.notifications_active : Icons.notifications_none,
+                color: nOn ? Colors.amber : null)),
         IconButton(onPressed: hs.isEmpty ? null : copyCsv, icon: const Icon(Icons.copy)),
         IconButton(onPressed: loading ? null : refresh, icon: const Icon(Icons.refresh)),
       ]),
@@ -137,6 +200,12 @@ class PortfolioPageState extends State<PortfolioPage> {
                 Text('Nilai sekarang: Rp ${rp(value)}'),
                 Text('P/L: Rp ${rp(pl)}  (${cost == 0 ? '0.0' : (pl / cost * 100).toStringAsFixed(2)}%)',
                     style: TextStyle(color: plc, fontWeight: FontWeight.bold)),
+                if (nOn)
+                  Text(
+                      cost > 0 && pl / cost * 100 >= nTarget
+                          ? '🎯 Di atas target ${nTarget.toStringAsFixed(1)}%'
+                          : 'Notifikasi aktif: target +${nTarget.toStringAsFixed(1)}%',
+                      style: const TextStyle(fontSize: 12, color: Colors.amber)),
               ]),
             ),
           ),

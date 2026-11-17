@@ -3,9 +3,16 @@ on:
   push:
     branches: [main, master]
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      KS_ALIAS: sahamteori
+      # Opsional: simpan di GitHub Secrets (KS_PASS / KS_KEYPASS) agar tidak bergantung pada nilai bawaan ini.
+      KS_PASS: ${{ secrets.KS_PASS || 'sahamteori2026' }}
+      KS_KEYPASS: ${{ secrets.KS_KEYPASS || 'sahamteori2026' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -20,11 +27,23 @@ jobs:
           flutter create --platforms=android --project-name saham_teori --org com.fauzi tmp_app
           cp -r tmp_app/android ./android
           rm -rf tmp_app
-          sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application#' android/app/src/main/AndroidManifest.xml
-          sed -i 's#android:label="[^"]*"#android:label="Saham Teori"#' android/app/src/main/AndroidManifest.xml
+          python3 tools/patch_android.py
       - run: flutter pub get
-      - run: flutter build apk --release
+      - name: Generate launcher icons
+        run: dart run flutter_launcher_icons
+      - name: Build signed APK
+        run: |
+          export KS_FILE="$GITHUB_WORKSPACE/keystore/saham-teori.jks"
+          flutter build apk --release --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }}
       - uses: actions/upload-artifact@v4
         with:
           name: saham-teori-apk
           path: build/app/outputs/flutter-apk/app-release.apk
+      - name: Publish release (untuk update dalam aplikasi)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk saham-teori.apk
+          gh release create "v1.0.${{ github.run_number }}" saham-teori.apk \
+            --title "Saham Teori v1.0.${{ github.run_number }}" \
+            --notes "$(git log -1 --pretty=%s)" --latest
