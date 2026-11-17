@@ -6,7 +6,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
-const _repo = 'mohammadfauzi-mfz/saham-teori';
+const _repo = 'mohammadfauzi-mfz/Saham-teori';
 
 class UpdateInfo {
   final int build;
