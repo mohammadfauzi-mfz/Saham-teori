@@ -17,7 +17,7 @@ Future<List<Candle>?> indexCandles(String interval) async {
   if (_idx.containsKey(interval)) return _idx[interval];
   try {
     final d = await fetchCandles('^JKSE',
-        range: interval == '1d' ? '2y' : '5y', interval: interval);
+        range: rangeFor(interval), interval: interval);
     _idx[interval] = d;
     return d;
   } catch (_) {
@@ -32,8 +32,10 @@ Future<Quick> quick(String code) async {
   final fx = isForex(code);
   final f = fx ? Fund() : await Store.fund(code);
   final idxc = fx ? null : await indexCandles('1d');
+  swingOverride = fx ? autoSwing(d) : 0; // sinkron sampai recommend() selesai (tanpa await)
   final s = analyze(d, x, f, idx: idxc, forex: fx);
   final r = recommend(d, x, s);
+  swingOverride = 0;
   final chg = (d.last.c / d[d.length - 2].c - 1) * 100;
   return Quick(code, d.last.c, chg, r);
 }

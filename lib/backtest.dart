@@ -21,6 +21,7 @@ Future<BtResult> backtestAsync(List<Candle> d, {bool forex = false}) async {
     r.note = 'Data terlalu sedikit untuk backtest.';
     return r;
   }
+  final sw = swingOverride;
   var inPos = false;
   double entry = 0, stop = 0, target = 0;
   var ei = 0;
@@ -43,6 +44,7 @@ Future<BtResult> backtestAsync(List<Candle> d, {bool forex = false}) async {
     if (i % 10 == 0) await Future.delayed(Duration.zero);
     final sub = d.sublist(0, i + 1);
     final x = Indicators(sub);
+    swingOverride = sw;
     final sigs = analyze(sub, x, Fund(), forex: forex).where((s) => !s.name.startsWith('Relative')).toList();
     final ratio = sigs.where((s) => s.ok).length / sigs.length;
     if (inPos) {

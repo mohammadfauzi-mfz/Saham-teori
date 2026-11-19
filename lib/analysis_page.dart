@@ -24,6 +24,7 @@ class AnalysisPageState extends State<AnalysisPage> {
   Reco? reco, recoS;
   bool short = false;
   String loadedCode = '';
+  double loadedSwing = 0;
   Fund fund = Fund();
   List<double> sr = [];
   bool loading = false;
@@ -64,14 +65,15 @@ class AnalysisPageState extends State<AnalysisPage> {
       err = null;
     });
     try {
-      final d = await fetchCandles(code,
-          range: interval == '1d' ? '2y' : '5y', interval: interval);
+      final d = await fetchCandles(code, range: rangeFor(interval), interval: interval);
       if (d.length < 80) throw Exception('Data terlalu sedikit');
       final isFx = isForex(code);
       final f = isFx ? Fund() : await Store.fund(code);
       final w = await Store.watch();
       final i = Indicators(d);
       final idxc = isFx ? null : await indexCandles(interval);
+      loadedSwing = (isFx || isIntraday(interval)) ? autoSwing(d) : 0;
+      swingOverride = loadedSwing;
       final s = analyze(d, i, f, idx: idxc, forex: isFx);
       setState(() {
         data = d;
@@ -393,7 +395,7 @@ class AnalysisPageState extends State<AnalysisPage> {
         context: context,
         isScrollControlled: true,
         builder: (_) => FutureBuilder<BtResult>(
-              future: backtestAsync(data, forex: fx),
+              future: backtestAsync(data.length > 1200 ? data.sublist(data.length - 1200) : data, forex: fx),
               builder: (ctx, snap) {
                 if (!snap.hasData) {
                   return const Padding(
@@ -439,7 +441,7 @@ class AnalysisPageState extends State<AnalysisPage> {
   void copySummary() {
     final r = cur;
     if (r == null) return;
-    final tf = interval == '1d' ? 'Harian' : 'Mingguan';
+    final tf = tfLabel(interval);
     final b = StringBuffer();
     b.writeln('$code ($tf)${fx ? (short ? ' - SELL' : ' - BUY') : ''}');
     b.writeln('Harga: ${f0(r.price)}');
@@ -658,6 +660,8 @@ class AnalysisPageState extends State<AnalysisPage> {
   @override
   Widget build(BuildContext context) {
     priceDec = decFor(loadedCode);
+    intradayFmt = isIntraday(interval);
+    swingOverride = loadedSwing;
     final i = ind;
     final r = cur;
     final tech = sigs.where((s) => !s.fund).toList();
@@ -708,23 +712,21 @@ class AnalysisPageState extends State<AnalysisPage> {
             ]),
           ),
           const SizedBox(height: 8),
-          Row(children: [
-            ChoiceChip(
-                label: const Text('Harian'),
-                selected: interval == '1d',
-                onSelected: (_) {
-                  interval = '1d';
-                  load();
-                }),
-            const SizedBox(width: 8),
-            ChoiceChip(
-                label: const Text('Mingguan'),
-                selected: interval == '1wk',
-                onSelected: (_) {
-                  interval = '1wk';
-                  load();
-                }),
-          ]),
+          SizedBox(
+            height: 40,
+            child: ListView(scrollDirection: Axis.horizontal, children: [
+              for (final t in tfList)
+                Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                        label: Text(t[1]),
+                        selected: interval == t[0],
+                        onSelected: (_) {
+                          interval = t[0];
+                          load();
+                        })),
+            ]),
+          ),
           if (fx && recoS != null) ...[
             const SizedBox(height: 8),
             Row(children: [

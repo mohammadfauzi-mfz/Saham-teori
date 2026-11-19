@@ -21,6 +21,21 @@ class Pivot {
 /// Jumlah desimal harga saat ini (0 untuk saham IDX, 3-5 untuk forex). Diatur oleh halaman.
 int priceDec = 0;
 
+/// Ambang zigzag otomatis (untuk forex/intraday): 2x rata-rata rentang candle 100 terakhir.
+/// 0 = pakai pengaturan [Settings.swing].
+double swingOverride = 0;
+double get swingTh => swingOverride > 0 ? swingOverride : Settings.swing;
+
+double autoSwing(List<Candle> d) {
+  final n = d.length;
+  final from = math.max(0, n - 100);
+  var s = 0.0;
+  for (var i = from; i < n; i++) {
+    s += (d[i].h - d[i].l) / d[i].c;
+  }
+  return (2 * s / (n - from)).clamp(0.0005, 0.05).toDouble();
+}
+
 String f0(double v) => v.toStringAsFixed(priceDec);
 
 String rp(double v) {
@@ -71,14 +86,14 @@ List<Pivot> zigzag(List<double> c, double th) {
 }
 
 List<double> srLevels(Indicators x) {
-  final piv = zigzag(x.c, Settings.swing);
+  final piv = zigzag(x.c, swingTh);
   final hs = piv.where((e) => e.high).toList().reversed.take(3).map((e) => e.p);
   final ls = piv.where((e) => !e.high).toList().reversed.take(3).map((e) => e.p);
   return [...hs, ...ls];
 }
 
 List<Signal> analyze(List<Candle> d, Indicators x, Fund f, {List<Candle>? idx, bool forex = false}) {
-  final piv = zigzag(x.c, Settings.swing);
+  final piv = zigzag(x.c, swingTh);
   final all = <Signal>[
     _dow(piv),
     _elliott(piv),
@@ -396,7 +411,7 @@ Reco recommend(List<Candle> d, Indicators x, List<Signal> sigs) {
   final price = x.c.last;
   var atr = x.atr[n - 1];
   if (atr.isNaN) atr = price * 0.02;
-  final piv = zigzag(x.c, Settings.swing);
+  final piv = zigzag(x.c, swingTh);
   final lv = <MapEntry<String, double>>[];
   void add(String name, double v) {
     if (!v.isNaN && v < price && v > price * 0.8) lv.add(MapEntry(name, v));
@@ -482,7 +497,7 @@ Reco recommendShort(List<Candle> d, Indicators x, List<Signal> sigs) {
   final price = x.c.last;
   var atr = x.atr[n - 1];
   if (atr.isNaN) atr = price * 0.02;
-  final piv = zigzag(x.c, Settings.swing);
+  final piv = zigzag(x.c, swingTh);
   final lv = <MapEntry<String, double>>[];
   void add(String name, double v) {
     if (!v.isNaN && v > price && v < price * 1.2) lv.add(MapEntry(name, v));

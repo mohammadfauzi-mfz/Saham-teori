@@ -7,8 +7,29 @@ class Candle {
   Candle(this.t, this.o, this.h, this.l, this.c, this.v);
 }
 
-String fd(DateTime t) =>
-    '${t.day.toString().padLeft(2, '0')}/${t.month.toString().padLeft(2, '0')}/${(t.year % 100).toString().padLeft(2, '0')}';
+/// true saat timeframe intraday aktif: tanggal ditampilkan beserta jam (diatur oleh halaman Analisis).
+bool intradayFmt = false;
+
+String fd(DateTime t) {
+  final dd =
+      '${t.day.toString().padLeft(2, '0')}/${t.month.toString().padLeft(2, '0')}/${(t.year % 100).toString().padLeft(2, '0')}';
+  if (!intradayFmt) return dd;
+  return '${dd.substring(0, 5)} ${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+}
+
+/// [kode Yahoo, label, range data]. Batas Yahoo: 1m maks 7 hari, 5-30m maks 60 hari, 60m maks 730 hari.
+const tfList = [
+  ['1m', '1 mnt', '5d'],
+  ['5m', '5 mnt', '30d'],
+  ['15m', '15 mnt', '60d'],
+  ['30m', '30 mnt', '60d'],
+  ['60m', '1 jam', '6mo'],
+  ['1d', 'Harian', '2y'],
+  ['1wk', 'Mingguan', '5y'],
+];
+String rangeFor(String iv) => tfList.firstWhere((e) => e[0] == iv, orElse: () => tfList[5])[2];
+String tfLabel(String iv) => tfList.firstWhere((e) => e[0] == iv, orElse: () => tfList[5])[1];
+bool isIntraday(String iv) => iv.endsWith('m');
 
 const popular = [
   'BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM', 'ASII', 'UNVR', 'ICBP', 'INDF', 'KLBF',
