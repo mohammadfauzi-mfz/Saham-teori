@@ -29,9 +29,10 @@ Future<Quick> quick(String code) async {
   final d = await fetchCandles(code);
   if (d.length < 80) throw Exception('Data kurang');
   final x = Indicators(d);
-  final f = await Store.fund(code);
-  final idxc = await indexCandles('1d');
-  final s = analyze(d, x, f, idx: idxc);
+  final fx = isForex(code);
+  final f = fx ? Fund() : await Store.fund(code);
+  final idxc = fx ? null : await indexCandles('1d');
+  final s = analyze(d, x, f, idx: idxc, forex: fx);
   final r = recommend(d, x, s);
   final chg = (d.last.c / d[d.length - 2].c - 1) * 100;
   return Quick(code, d.last.c, chg, r);

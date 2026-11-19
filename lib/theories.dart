@@ -18,7 +18,10 @@ class Pivot {
   Pivot(this.i, this.p, this.high);
 }
 
-String f0(double v) => v.toStringAsFixed(0);
+/// Jumlah desimal harga saat ini (0 untuk saham IDX, 3-5 untuk forex). Diatur oleh halaman.
+int priceDec = 0;
+
+String f0(double v) => v.toStringAsFixed(priceDec);
 
 String rp(double v) {
   final s = v.round().toString();
@@ -74,9 +77,9 @@ List<double> srLevels(Indicators x) {
   return [...hs, ...ls];
 }
 
-List<Signal> analyze(List<Candle> d, Indicators x, Fund f, {List<Candle>? idx}) {
+List<Signal> analyze(List<Candle> d, Indicators x, Fund f, {List<Candle>? idx, bool forex = false}) {
   final piv = zigzag(x.c, Settings.swing);
-  return [
+  final all = <Signal>[
     _dow(piv),
     _elliott(piv),
     _fib(piv, x),
@@ -98,8 +101,12 @@ List<Signal> analyze(List<Candle> d, Indicators x, Fund f, {List<Candle>? idx}) 
     _mfi(x),
     _triangle(piv, x),
     _rs(x, idx),
-    ...fundSignals(f),
+    ...(forex ? <Signal>[] : fundSignals(f)),
   ];
+  if (!forex) return all;
+  // Forex tidak punya volume asli & fundamental saham: teori terkait dinonaktifkan.
+  const skip = {'Wyckoff (Akumulasi)', 'Konfirmasi Volume', 'MFI (Money Flow)', 'Relative Strength vs IHSG'};
+  return all.where((s) => !skip.contains(s.name)).toList();
 }
 
 List<Signal> fundSignals(Fund f) {
@@ -464,6 +471,92 @@ Reco recommend(List<Candle> d, Indicators x, List<Signal> sigs) {
       techTotal: tech.length,
       fundScore: fund.where((s) => s.ok).length,
       fundTotal: fund.length,
+      verdict: verdict,
+      supports: names);
+}
+
+/// Cermin dari [recommend] untuk posisi JUAL (short): zona jual = konfluensi resistance di atas harga,
+/// stop di atas zona, target ke swing low. Skor = jumlah teori yang merah (bearish).
+Reco recommendShort(List<Candle> d, Indicators x, List<Signal> sigs) {
+  final n = x.c.length;
+  final price = x.c.last;
+  var atr = x.atr[n - 1];
+  if (atr.isNaN) atr = price * 0.02;
+  final piv = zigzag(x.c, Settings.swing);
+  final lv = <MapEntry<String, double>>[];
+  void add(String name, double v) {
+    if (!v.isNaN && v > price && v < price * 1.2) lv.add(MapEntry(name, v));
+  }
+
+  add('MA20', x.ma20[n - 1]);
+  add('MA50', x.ma50[n - 1]);
+  add('MA200', x.ma200[n - 1]);
+  add('Bollinger atas', x.bbUp[n - 1]);
+  add('Bollinger tengah', x.bbMid[n - 1]);
+  final cl = x.cloud(n - 1);
+  if (cl != null) add('Bawah awan Ichimoku', math.min(cl[0], cl[1]));
+  for (var k = piv.length - 1; k >= 1; k--) {
+    if (!piv[k].high && piv[k - 1].high) {
+      final hi = piv[k - 1].p, lo = piv[k].p;
+      add('Fib 38,2%', lo + (hi - lo) * 0.382);
+      add('Fib 50%', lo + (hi - lo) * 0.5);
+      add('Fib 61,8%', lo + (hi - lo) * 0.618);
+      break;
+    }
+  }
+  for (final p in piv.where((e) => e.high).toList().reversed.take(2)) {
+    add('Swing high', p.p);
+  }
+
+  double ideal;
+  var names = <String>[];
+  if (lv.isEmpty) {
+    ideal = price + atr;
+  } else {
+    var best = lv.first;
+    var bestN = -1;
+    for (final a in lv) {
+      final cnt = lv.where((b) => (b.value - a.value).abs() <= 0.75 * atr).length;
+      if (cnt > bestN || (cnt == bestN && a.value < best.value)) {
+        best = a;
+        bestN = cnt;
+      }
+    }
+    final grp = lv.where((b) => (b.value - best.value).abs() <= 0.75 * atr).toList();
+    ideal = grp.map((e) => e.value).reduce((a, b) => a + b) / grp.length;
+    names = grp.map((e) => e.key).toList();
+  }
+  final sellHigh = ideal + Settings.zoneAtr * atr;
+  final sellLow = math.max(ideal - Settings.zoneAtr * atr, price);
+  final stop = sellHigh + Settings.stopAtr * atr;
+  final r = stop - ideal;
+  final lows = piv.where((e) => !e.high && e.p < ideal - r).map((e) => e.p).toList()
+    ..sort((a, b) => b.compareTo(a));
+  final t1 = lows.isNotEmpty ? lows.first : ideal - 2 * r;
+  final t2 = math.max(math.min(lows.isNotEmpty ? lows.last : ideal - 3 * r, ideal - 3 * r), 0.0);
+  final red = sigs.where((s) => !s.ok).length;
+  final tech = sigs.where((s) => !s.fund).toList();
+  final ratio = sigs.isEmpty ? 0.0 : red / sigs.length;
+  final verdict = ratio >= 0.6
+      ? 'Cenderung bearish: jual (short) bertahap di zona jual.'
+      : ratio >= 0.35
+          ? 'Netral: tunggu konfirmasi, jual hanya jika harga di zona jual.'
+          : 'Bearish lemah: sebaiknya tunggu sinyal turun menguat.';
+  return Reco(
+      price: price,
+      buyLow: sellLow,
+      buyHigh: sellHigh,
+      ideal: ideal,
+      stop: stop,
+      t1: t1,
+      t2: t2,
+      rr: (ideal - t1) / r,
+      score: red,
+      total: sigs.length,
+      techScore: tech.where((s) => !s.ok).length,
+      techTotal: tech.length,
+      fundScore: 0,
+      fundTotal: 0,
       verdict: verdict,
       supports: names);
 }

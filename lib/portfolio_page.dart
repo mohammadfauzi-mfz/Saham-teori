@@ -169,6 +169,7 @@ class PortfolioPageState extends State<PortfolioPage> {
 
   @override
   Widget build(BuildContext context) {
+    priceDec = 0;
     var cost = 0.0, value = 0.0;
     for (final h in hs) {
       final q = res[h.code];

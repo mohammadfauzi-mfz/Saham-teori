@@ -13,7 +13,7 @@ class BtResult {
 
 /// Aturan: beli (open candle berikutnya) saat >=60% teori teknikal hijau;
 /// jual saat <35%, stop 2 ATR, target 3 ATR, maksimal 40 candle. Fee 0,4% pulang-pergi.
-Future<BtResult> backtestAsync(List<Candle> d) async {
+Future<BtResult> backtestAsync(List<Candle> d, {bool forex = false}) async {
   final r = BtResult();
   final n = d.length;
   const start = 100;
@@ -25,7 +25,7 @@ Future<BtResult> backtestAsync(List<Candle> d) async {
   double entry = 0, stop = 0, target = 0;
   var ei = 0;
   var eq = 1.0, peak = 1.0;
-  const fee = 0.004;
+  final fee = forex ? 0.0002 : 0.004;
 
   void close(int i, double px, String why) {
     final ret = px / entry - 1 - fee;
@@ -43,7 +43,7 @@ Future<BtResult> backtestAsync(List<Candle> d) async {
     if (i % 10 == 0) await Future.delayed(Duration.zero);
     final sub = d.sublist(0, i + 1);
     final x = Indicators(sub);
-    final sigs = analyze(sub, x, Fund()).where((s) => !s.name.startsWith('Relative')).toList();
+    final sigs = analyze(sub, x, Fund(), forex: forex).where((s) => !s.name.startsWith('Relative')).toList();
     final ratio = sigs.where((s) => s.ok).length / sigs.length;
     if (inPos) {
       if (d[i].l <= stop) {

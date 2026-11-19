@@ -34,7 +34,7 @@ class Alert {
 }
 
 class Settings {
-  static double swing = 0.05, stopAtr = 1.0, zoneAtr = 0.5, riskPct = 1.0, capital = 10000000;
+  static double swing = 0.05, stopAtr = 1.0, zoneAtr = 0.5, riskPct = 1.0, capital = 10000000, capitalUsd = 1000;
 
   static Future<void> load() async {
     final p = await SharedPreferences.getInstance();
@@ -43,6 +43,7 @@ class Settings {
     zoneAtr = p.getDouble('s_zone') ?? zoneAtr;
     riskPct = p.getDouble('s_risk') ?? riskPct;
     capital = p.getDouble('s_cap') ?? capital;
+    capitalUsd = p.getDouble('s_capusd') ?? capitalUsd;
   }
 
   static Future<void> save() async {
@@ -52,6 +53,7 @@ class Settings {
     await p.setDouble('s_zone', zoneAtr);
     await p.setDouble('s_risk', riskPct);
     await p.setDouble('s_cap', capital);
+    await p.setDouble('s_capusd', capitalUsd);
   }
 }
 

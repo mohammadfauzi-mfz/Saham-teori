@@ -8,6 +8,7 @@ Color scoreColor(double ratio) =>
     ratio >= 0.6 ? Colors.greenAccent : (ratio >= 0.35 ? Colors.amber : Colors.redAccent);
 
 Widget quickTile(Quick q, VoidCallback onTap, {Widget? trailing}) {
+  priceDec = decFor(q.code);
   final col = scoreColor(q.ratio);
   final up = q.chg >= 0;
   return ListTile(
@@ -18,7 +19,7 @@ Widget quickTile(Quick q, VoidCallback onTap, {Widget? trailing}) {
     ),
     title: Text(q.code, style: const TextStyle(fontWeight: FontWeight.bold)),
     subtitle: Text(
-        'Rp ${rp(q.price)}  ${up ? '+' : ''}${q.chg.toStringAsFixed(2)}%'
+        '${isForex(q.code) ? f0(q.price) : 'Rp ${rp(q.price)}'}  ${up ? '+' : ''}${q.chg.toStringAsFixed(2)}%'
         '${q.reco.inZone ? '  •  DI ZONA BELI' : '  •  zona ${f0(q.reco.buyLow)}–${f0(q.reco.buyHigh)}'}',
         style: TextStyle(color: q.reco.inZone ? Colors.greenAccent : null, fontSize: 12)),
     trailing: trailing,
@@ -271,14 +272,18 @@ class _ScreenerPageState extends State<ScreenerPage> {
     });
   }
 
-  Future<void> scan() async {
+  int total = popular.length;
+
+  Future<void> scan([List<String>? src]) async {
+    final list = src ?? popular;
     setState(() {
       running = true;
       done = 0;
+      total = list.length;
       results.clear();
     });
-    for (var k = 0; k < popular.length; k += 5) {
-      final part = popular.skip(k).take(5).toList();
+    for (var k = 0; k < list.length; k += 5) {
+      final part = list.skip(k).take(5).toList();
       await Future.wait(part.map((c) async {
         try {
           results.add(await quick(c));
@@ -305,8 +310,10 @@ class _ScreenerPageState extends State<ScreenerPage> {
                   onPressed: running ? null : scan,
                   icon: const Icon(Icons.radar),
                   label: const Text('Pindai saham populer')),
+              const SizedBox(width: 8),
+              OutlinedButton(onPressed: running ? null : () => scan(forexPairs), child: const Text('Forex')),
               const SizedBox(width: 12),
-              if (running || done > 0) Text('$done/${popular.length}'),
+              if (running || done > 0) Text('$done/$total'),
             ]),
           ),
           Padding(

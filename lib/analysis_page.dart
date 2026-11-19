@@ -21,7 +21,9 @@ class AnalysisPageState extends State<AnalysisPage> {
   List<Candle> data = [];
   List<Signal> sigs = [];
   Indicators? ind;
-  Reco? reco;
+  Reco? reco, recoS;
+  bool short = false;
+  String loadedCode = '';
   Fund fund = Fund();
   List<double> sr = [];
   bool loading = false;
@@ -40,6 +42,8 @@ class AnalysisPageState extends State<AnalysisPage> {
   bool inWatch = false;
 
   int get offset => off.round();
+  bool get fx => isForex(loadedCode);
+  Reco? get cur => (fx && short) ? recoS : reco;
 
   @override
   void initState() {
@@ -63,17 +67,22 @@ class AnalysisPageState extends State<AnalysisPage> {
       final d = await fetchCandles(code,
           range: interval == '1d' ? '2y' : '5y', interval: interval);
       if (d.length < 80) throw Exception('Data terlalu sedikit');
-      final f = await Store.fund(code);
+      final isFx = isForex(code);
+      final f = isFx ? Fund() : await Store.fund(code);
       final w = await Store.watch();
       final i = Indicators(d);
-      final idxc = await indexCandles(interval);
-      final s = analyze(d, i, f, idx: idxc);
+      final idxc = isFx ? null : await indexCandles(interval);
+      final s = analyze(d, i, f, idx: idxc, forex: isFx);
       setState(() {
         data = d;
         ind = i;
         fund = f;
         sigs = s;
         reco = recommend(d, i, s);
+        recoS = isFx ? recommendShort(d, i, s) : null;
+        short = false;
+        loadedCode = code;
+        priceDec = decFor(code);
         sr = srLevels(i);
         count = math.min(120, d.length);
         off = -(count * 0.15);
@@ -155,6 +164,10 @@ class AnalysisPageState extends State<AnalysisPage> {
   }
 
   void calc() {
+    if (fx) {
+      calcFx();
+      return;
+    }
     final r = reco;
     if (r == null) return;
     final cap = TextEditingController(text: Settings.capital.toStringAsFixed(0));
@@ -205,6 +218,74 @@ class AnalysisPageState extends State<AnalysisPage> {
                 ]),
               );
             }));
+  }
+
+  Future<void> calcFx() async {
+    final r = cur;
+    if (r == null) return;
+    final c = loadedCode;
+    final usdQ = await usdPerQuote(c, r.price);
+    if (!mounted) return;
+    final pip = pipSize(c);
+    final pipVal = pip * contractSize(c) * (usdQ ?? 0); // USD per pip per 1 lot
+    final cap = TextEditingController(text: Settings.capitalUsd.toStringAsFixed(0));
+    final risk = TextEditingController(text: Settings.riskPct.toString());
+    final sh = short;
+    await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => StatefulBuilder(builder: (ctx, set) {
+              final cp = double.tryParse(cap.text.trim().replaceAll(',', '.')) ?? 0;
+              final rk = double.tryParse(risk.text.trim().replaceAll(',', '.')) ?? 0;
+              final stopPips = (r.ideal - r.stop).abs() / pip;
+              final t1Pips = (r.t1 - r.ideal).abs() / pip;
+              var lots = 0.0;
+              if (pipVal > 0 && stopPips > 0) lots = ((cp * rk / 100) / (stopPips * pipVal) * 100).floor() / 100;
+              return Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(ctx).viewInsets.bottom + 16),
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Kalkulator Lot Forex $c', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 8),
+                  TextField(
+                      controller: cap,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                          labelText: 'Modal (USD)', border: OutlineInputBorder(), isDense: true),
+                      onChanged: (v) {
+                        Settings.capitalUsd = double.tryParse(v.trim().replaceAll(',', '.')) ?? Settings.capitalUsd;
+                        set(() {});
+                      }),
+                  const SizedBox(height: 8),
+                  TextField(
+                      controller: risk,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                          labelText: 'Risiko per transaksi (% modal)',
+                          border: OutlineInputBorder(),
+                          isDense: true),
+                      onChanged: (_) => set(() {})),
+                  const SizedBox(height: 12),
+                  Text('${sh ? 'Jual (short)' : 'Beli (long)'} di ${f0(r.ideal)}, stop ${f0(r.stop)} '
+                      '(${stopPips.toStringAsFixed(1)} pip)'),
+                  Text('Ukuran posisi: ${lots.toStringAsFixed(2)} lot',
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
+                  if (usdQ == null)
+                    const Text('Kurs konversi ke USD tidak tersedia, nilai pip tidak bisa dihitung.',
+                        style: TextStyle(color: Colors.redAccent, fontSize: 12))
+                  else ...[
+                    Text('Nilai 1 pip per 1 lot ≈ \$${pipVal.toStringAsFixed(2)}'),
+                    Text('Rugi jika kena stop: \$${(lots * stopPips * pipVal).toStringAsFixed(2)}'),
+                    Text('Potensi untung di Target 1: \$${(lots * t1Pips * pipVal).toStringAsFixed(2)}'),
+                  ],
+                  const SizedBox(height: 6),
+                  const Text(
+                      '1 lot = 100.000 unit (emas: 100 oz). Belum termasuk spread/komisi/swap. '
+                      'Cek margin & leverage di broker; lot dibulatkan ke bawah 0,01.',
+                      style: TextStyle(fontSize: 11, color: Colors.white38)),
+                ]),
+              );
+            }));
+    await Settings.save();
   }
 
   Future<void> openSettings() async {
@@ -312,7 +393,7 @@ class AnalysisPageState extends State<AnalysisPage> {
         context: context,
         isScrollControlled: true,
         builder: (_) => FutureBuilder<BtResult>(
-              future: backtestAsync(data),
+              future: backtestAsync(data, forex: fx),
               builder: (ctx, snap) {
                 if (!snap.hasData) {
                   return const Padding(
@@ -344,8 +425,8 @@ class AnalysisPageState extends State<AnalysisPage> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
-                          'Aturan: beli saat ≥60% teori teknikal hijau, jual saat <35%, stop 2 ATR, target 3 ATR, maks 40 candle, fee 0,4%. '
+                      Text(
+                          'Aturan: beli saat ≥60% teori teknikal hijau, jual saat <35%, stop 2 ATR, target 3 ATR, maks 40 candle, fee ${fx ? '0,02' : '0,4'}%. '
                           'Hasil historis tidak menjamin masa depan.',
                           style: TextStyle(fontSize: 11, color: Colors.white38)),
                     ]),
@@ -356,15 +437,15 @@ class AnalysisPageState extends State<AnalysisPage> {
   }
 
   void copySummary() {
-    final r = reco;
+    final r = cur;
     if (r == null) return;
     final tf = interval == '1d' ? 'Harian' : 'Mingguan';
     final b = StringBuffer();
-    b.writeln('$code ($tf)');
+    b.writeln('$code ($tf)${fx ? (short ? ' - SELL' : ' - BUY') : ''}');
     b.writeln('Harga: ${f0(r.price)}');
     b.writeln('Skor: ${r.score}/${r.total} hijau');
     b.writeln(r.verdict);
-    b.writeln('Zona beli: ${f0(r.buyLow)} - ${f0(r.buyHigh)} (ideal ${f0(r.ideal)})');
+    b.writeln('${fx && short ? 'Zona jual' : 'Zona beli'}: ${f0(r.buyLow)} - ${f0(r.buyHigh)} (ideal ${f0(r.ideal)})');
     b.writeln('Stop: ${f0(r.stop)} | T1: ${f0(r.t1)} | T2: ${f0(r.t2)}');
     for (final s in sigs) {
       b.writeln('${s.ok ? '🟢' : '🔴'} ${s.name}');
@@ -401,6 +482,8 @@ class AnalysisPageState extends State<AnalysisPage> {
       onSelected: (x) => setState(() => f(x)));
 
   Widget recoCard(Reco r) {
+    final sh = fx && short;
+    final z = sh ? 'jual' : 'beli';
     final col = r.ratio >= 0.6 ? Colors.greenAccent : (r.ratio >= 0.35 ? Colors.amber : Colors.redAccent);
     final dist = (r.ideal - r.price) / r.price * 100;
     const st = TextStyle(fontSize: 13, height: 1.5);
@@ -408,27 +491,30 @@ class AnalysisPageState extends State<AnalysisPage> {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Rekomendasi Harga Beli', style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(sh ? 'Rekomendasi Harga Jual (Short)' : 'Rekomendasi Harga Beli', style: const TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
           Text(r.verdict, style: TextStyle(color: col, fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
           Text('Harga sekarang: ${f0(r.price)}', style: st),
-          Text('Zona beli ideal: ${f0(r.buyLow)} – ${f0(r.buyHigh)}', style: st),
+          Text('Zona $z ideal: ${f0(r.buyLow)} – ${f0(r.buyHigh)}', style: st),
           Text('Titik ideal: ${f0(r.ideal)} (${dist.toStringAsFixed(1)}% dari harga sekarang)', style: st),
           if (r.inZone)
-            const Text('Harga sekarang sudah berada di zona beli.',
-                style: TextStyle(fontSize: 13, color: Colors.greenAccent)),
-          if (r.supports.isNotEmpty) Text('Konfluensi support: ${r.supports.join(', ')}', style: st),
+            Text('Harga sekarang sudah berada di zona $z.',
+                style: const TextStyle(fontSize: 13, color: Colors.greenAccent)),
+          if (r.supports.isNotEmpty) Text('Konfluensi ${sh ? 'resistance' : 'support'}: ${r.supports.join(', ')}', style: st),
           Text('Stop loss: ${f0(r.stop)}', style: st),
           Text('Target 1: ${f0(r.t1)}  •  Target 2: ${f0(r.t2)}', style: st),
           Text('Risk:Reward ke Target 1 = 1 : ${r.rr.toStringAsFixed(1)}', style: st),
-          Text('Skor total ${r.score}/${r.total}  (Teknikal ${r.techScore}/${r.techTotal}'
-              '${r.fundTotal > 0 ? ', Fundamental ${r.fundScore}/${r.fundTotal}' : ', Fundamental belum diisi'})',
+          Text('${sh ? 'Skor bearish' : 'Skor total'} ${r.score}/${r.total}  (Teknikal ${r.techScore}/${r.techTotal}'
+              '${r.fundTotal > 0 ? ', Fundamental ${r.fundScore}/${r.fundTotal}' : (fx ? '' : ', Fundamental belum diisi')})',
               style: st),
           const SizedBox(height: 6),
-          const Text(
-              'Dihitung dari konfluensi support (MA, Bollinger, Fibonacci, swing low, Ichimoku), '
-              'stop berbasis ATR, target dari swing high. Bukan rekomendasi investasi.',
+          Text(
+              sh
+                  ? 'Dihitung dari konfluensi resistance (MA, Bollinger, Fibonacci, swing high, Ichimoku), '
+                      'stop berbasis ATR di atas zona, target ke swing low. Bukan rekomendasi investasi.'
+                  : 'Dihitung dari konfluensi support (MA, Bollinger, Fibonacci, swing low, Ichimoku), '
+                      'stop berbasis ATR, target dari swing high. Bukan rekomendasi investasi.',
               style: TextStyle(fontSize: 11, color: Colors.white38)),
         ]),
       ),
@@ -489,7 +575,7 @@ class AnalysisPageState extends State<AnalysisPage> {
     final idx = (cross ?? (r[1] - 1)).clamp(0, n - 1).toInt();
     final c = data[idx];
     final info =
-        '${fd(c.t)}  O ${f0(c.o)}  H ${f0(c.h)}  L ${f0(c.l)}  C ${f0(c.c)}  Vol ${rp(c.v)}';
+        '${fd(c.t)}  O ${f0(c.o)}  H ${f0(c.h)}  L ${f0(c.l)}  C ${f0(c.c)}${fx ? '' : '  Vol ${rp(c.v)}'}';
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Expanded(child: Text(info, style: const TextStyle(fontSize: 11, color: Colors.white70))),
@@ -532,7 +618,8 @@ class AnalysisPageState extends State<AnalysisPage> {
                   ind: i,
                   count: count,
                   offset: offset,
-                  reco: reco,
+                  reco: cur,
+                  zoneLabel: (fx && short) ? 'Zona jual' : 'Zona beli',
                   oMA: oMA,
                   oBB: oBB,
                   oSR: oSR,
@@ -542,7 +629,7 @@ class AnalysisPageState extends State<AnalysisPage> {
           ),
         ));
       }),
-      if (pVol) panel('Volume', 60, VolPainter(data, count, offset)),
+      if (pVol && !fx) panel('Volume', 60, VolPainter(data, count, offset)),
       if (pRSI)
         panel('RSI (14)', 90,
             SubPainter([i.rsi], [Colors.purpleAccent], count, offset,
@@ -570,8 +657,9 @@ class AnalysisPageState extends State<AnalysisPage> {
 
   @override
   Widget build(BuildContext context) {
+    priceDec = decFor(loadedCode);
     final i = ind;
-    final r = reco;
+    final r = cur;
     final tech = sigs.where((s) => !s.fund).toList();
     final fu = sigs.where((s) => s.fund).toList();
     final green = sigs.where((s) => s.ok).length;
@@ -597,7 +685,7 @@ class AnalysisPageState extends State<AnalysisPage> {
                 controller: ctl,
                 textCapitalization: TextCapitalization.characters,
                 decoration: const InputDecoration(
-                    labelText: 'Kode saham (contoh: BBCA, TLKM)',
+                    labelText: 'Kode saham / pair (BBCA, EURUSD, XAUUSD)',
                     border: OutlineInputBorder(),
                     isDense: true),
                 onSubmitted: (_) => load(),
@@ -606,6 +694,19 @@ class AnalysisPageState extends State<AnalysisPage> {
             const SizedBox(width: 8),
             FilledButton(onPressed: loading ? null : load, child: const Text('Muat')),
           ]),
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 34,
+            child: ListView(scrollDirection: Axis.horizontal, children: [
+              for (final p in forexPairs)
+                Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ActionChip(
+                        label: Text(p, style: const TextStyle(fontSize: 12)),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => loadCode(p))),
+            ]),
+          ),
           const SizedBox(height: 8),
           Row(children: [
             ChoiceChip(
@@ -624,6 +725,20 @@ class AnalysisPageState extends State<AnalysisPage> {
                   load();
                 }),
           ]),
+          if (fx && recoS != null) ...[
+            const SizedBox(height: 8),
+            Row(children: [
+              ChoiceChip(
+                  label: const Text('Buy (Long)'),
+                  selected: !short,
+                  onSelected: (_) => setState(() => short = false)),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                  label: const Text('Sell (Short)'),
+                  selected: short,
+                  onSelected: (_) => setState(() => short = true)),
+            ]),
+          ],
           const SizedBox(height: 8),
           if (loading) const LinearProgressIndicator(),
           if (err != null) Text(err!, style: const TextStyle(color: Colors.redAccent)),
@@ -635,12 +750,13 @@ class AnalysisPageState extends State<AnalysisPage> {
             const SizedBox(height: 4),
             Wrap(spacing: 6, runSpacing: 6, children: tech.map(chip).toList()),
             const SizedBox(height: 8),
-            const Text('Fundamental (input manual)', style: TextStyle(fontSize: 11, color: Colors.white54)),
+            if (!fx) const Text('Fundamental (input manual)', style: TextStyle(fontSize: 11, color: Colors.white54)),
             const SizedBox(height: 4),
             if (fu.isNotEmpty) Wrap(spacing: 6, runSpacing: 6, children: fu.map(chip).toList()),
             const SizedBox(height: 4),
             Wrap(spacing: 8, children: [
-              OutlinedButton.icon(
+              if (!fx)
+                OutlinedButton.icon(
                   onPressed: editFund,
                   icon: const Icon(Icons.edit, size: 16),
                   label: Text(fu.isEmpty ? 'Isi fundamental' : 'Ubah fundamental')),
@@ -652,7 +768,8 @@ class AnalysisPageState extends State<AnalysisPage> {
                   onPressed: runBacktest,
                   icon: const Icon(Icons.history, size: 16),
                   label: const Text('Backtest')),
-              OutlinedButton.icon(
+              if (!fx)
+                OutlinedButton.icon(
                   onPressed: addPortfolio,
                   icon: const Icon(Icons.add_chart, size: 16),
                   label: const Text('Ke portofolio')),
@@ -665,7 +782,7 @@ class AnalysisPageState extends State<AnalysisPage> {
               fc('MA', oMA, (v) => oMA = v),
               fc('Bollinger', oBB, (v) => oBB = v),
               fc('S/R', oSR, (v) => oSR = v),
-              fc('Volume', pVol, (v) => pVol = v),
+              if (!fx) fc('Volume', pVol, (v) => pVol = v),
               fc('RSI', pRSI, (v) => pRSI = v),
               fc('MACD', pMACD, (v) => pMACD = v),
               fc('Stoch', pStoch, (v) => pStoch = v),

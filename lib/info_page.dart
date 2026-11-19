@@ -28,6 +28,9 @@ const _items = <List<String>>[
   ['Relative Strength vs IHSG', 'Saham yang lebih kuat dari indeks cenderung memimpin.', 'Hijau jika return 60 candle terakhir lebih besar dari IHSG.'],
   ['Backtest', 'Menguji aturan pada data historis saham yang sedang dibuka.', 'Beli saat ≥60% teori teknikal hijau, jual saat <35%, stop 2 ATR, target 3 ATR, maks 40 candle, fee 0,4%. Hasil lalu tidak menjamin masa depan.'],
   ['Portofolio & Alert', 'Catat posisi dan pantau harga.', 'Alert harga dicek saat Watchlist dibuka. Notifikasi target portofolio (ikon lonceng di Portofolio) dicek otomatis di latar belakang kira-kira tiap 15 menit.'],
+  ['Forex: Pip, Lot, Leverage', 'Pair = nilai satu mata uang terhadap yang lain. 1 pip = 0,0001 (0,01 untuk pair JPY, 0,1 untuk emas). 1 lot standar = 100.000 unit. Leverage memperbesar untung sekaligus rugi.', 'Kalkulator posisi forex menghitung lot dari modal (USD), % risiko, dan jarak stop dalam pip. Nilai pip pair silang dikonversi otomatis ke USD.'],
+  ['Forex: Buy & Sell', 'Di forex kamu bisa untung dari harga naik (buy) maupun turun (sell/short).', 'Mode Sell memakai cermin logika beli: zona jual = konfluensi resistance (MA, Bollinger atas, Fibonacci, swing high, bawah awan Ichimoku), stop di atas zona, target ke swing low. Skor Sell = jumlah teori yang merah. Heuristik, bukan rekomendasi.'],
+  ['Forex: Sesi & Volume', 'Pasar buka 24 jam Senin-Jumat; sesi London dan New York paling aktif.', 'Data forex Yahoo Finance tidak punya volume asli, jadi Wyckoff, Konfirmasi Volume, MFI, Relative Strength IHSG, dan fundamental dinonaktifkan untuk forex. Harga bisa tertunda.'],
   ['Harga Beli Ideal', 'Area di mana beberapa support bertemu (konfluensi).', 'Dari MA20/50/200, Bollinger, Fibonacci, swing low, awan Ichimoku. Zona ±0,5 ATR, stop 1 ATR di bawah zona, target dari swing high.'],
 ];
 

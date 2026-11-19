@@ -12,3 +12,5 @@ Android menolak update dan aplikasi harus di-uninstall dulu.
 Fitur: grafik candlestick (geser/cubit zoom/crosshair), harian & mingguan, 21 teori teknikal + fundamental
 (manual atau otomatis), zona beli ideal + stop + target, kalkulator posisi, backtest, watchlist + alert,
 portofolio + notifikasi target untung (latar belakang), screener, IHSG, pengaturan, penjelasan teori.
+
+**Forex & emas:** ketik pair (mis. `EURUSD`, `USDJPY`, `XAUUSD`) atau pilih dari chip di halaman Analisis. Ada mode Buy/Sell, harga desimal, kalkulator lot/pip (modal USD), dan tombol "Forex" di Screener. Data dari Yahoo Finance (tanpa volume).

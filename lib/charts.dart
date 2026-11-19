@@ -50,6 +50,7 @@ class PricePainter extends CustomPainter {
   final bool oMA, oBB, oSR;
   final List<double> sr;
   final int? cross;
+  final String zoneLabel;
   PricePainter(
       {required this.d,
       required this.ind,
@@ -60,6 +61,7 @@ class PricePainter extends CustomPainter {
       this.oBB = true,
       this.oSR = true,
       this.sr = const [],
+      this.zoneLabel = 'Zona beli',
       this.cross});
 
   @override
@@ -82,7 +84,10 @@ class PricePainter extends CustomPainter {
         }
       }
     }
-    if (reco != null && offset <= 0 && reco!.stop > mn * 0.88) mn = math.min(mn, reco!.stop);
+    if (reco != null && offset <= 0 && reco!.stop > mn * 0.88 && reco!.stop < mx * 1.12) {
+      mn = math.min(mn, reco!.stop);
+      mx = math.max(mx, reco!.stop);
+    }
     final pad = (mx - mn) * 0.03;
     mn -= pad;
     mx += pad;
@@ -94,7 +99,7 @@ class PricePainter extends CustomPainter {
       final v = mn + (mx - mn) * k / 4;
       final yy = y(v);
       canvas.drawLine(Offset(0, yy), Offset(size.width, yy), grid);
-      _txt(canvas, v.toStringAsFixed(0), Offset(2, yy - 12));
+      _txt(canvas, f0(v), Offset(2, yy - 12));
     }
     if (reco != null) {
       canvas.drawRect(Rect.fromLTRB(0, y(reco!.buyHigh), size.width, y(reco!.buyLow)),
@@ -105,7 +110,7 @@ class PricePainter extends CustomPainter {
           Paint()
             ..color = Colors.redAccent
             ..strokeWidth = 1);
-      _txt(canvas, 'Zona beli', Offset(size.width - 50, y(reco!.buyHigh) + 1));
+      _txt(canvas, zoneLabel, Offset(size.width - 50, y(reco!.buyHigh) + 1));
       _txt(canvas, 'Stop', Offset(size.width - 28, y(reco!.stop) - 12));
     }
     if (oSR) {
