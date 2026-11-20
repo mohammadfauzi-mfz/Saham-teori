@@ -29,6 +29,7 @@ if kts.exists():
     if n != 1: die('signingConfig debug tidak ditemukan (kts)')
     s += '\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
     if 'isCoreLibraryDesugaringEnabled' not in s: die('compileOptions tidak ditemukan (kts)')
+    s = re.sub(r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 24', s)
     kts.write_text(s)
 elif grv.exists():
     s = grv.read_text()
@@ -49,14 +50,25 @@ elif grv.exists():
     if n != 1: die('signingConfig debug tidak ditemukan (groovy)')
     s += '\ndependencies {\n    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"\n}\n'
     if 'coreLibraryDesugaringEnabled' not in s: die('compileOptions tidak ditemukan (groovy)')
+    s = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 24', s)
     grv.write_text(s)
 else:
     die('build.gradle(.kts) tidak ada')
 
 m = manifest.read_text()
 perms = ''.join('    <uses-permission android:name="android.permission.%s"/>\n' % p for p in
-                ['INTERNET', 'POST_NOTIFICATIONS', 'REQUEST_INSTALL_PACKAGES', 'RECEIVE_BOOT_COMPLETED', 'WAKE_LOCK'])
+                ['INTERNET', 'POST_NOTIFICATIONS', 'REQUEST_INSTALL_PACKAGES', 'RECEIVE_BOOT_COMPLETED', 'WAKE_LOCK',
+                 'SYSTEM_ALERT_WINDOW', 'FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_SPECIAL_USE'])
 m = m.replace('<application', perms + '    <application', 1)
 m = re.sub(r'android:label="[^"]*"', 'android:label="Saham Teori"', m, count=1)
+svc = '''        <service android:name="flutter.overlay.window.flutter_overlay_window.OverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Indikator teknikal forex melayang di atas aplikasi lain"/>
+        </service>
+'''
+if '</application>' not in m: die('</application> tidak ditemukan')
+m = m.replace('</application>', svc + '    </application>', 1)
 manifest.write_text(m)
 print('patch android OK')

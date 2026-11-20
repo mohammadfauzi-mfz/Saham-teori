@@ -14,3 +14,5 @@ Fitur: grafik candlestick (geser/cubit zoom/crosshair), harian & mingguan, 21 te
 portofolio + notifikasi target untung (latar belakang), screener, IHSG, pengaturan, penjelasan teori.
 
 **Forex & emas:** ketik pair (mis. `EURUSD`, `USDJPY`, `XAUUSD`) atau pilih dari chip di halaman Analisis. Ada mode Buy/Sell, harga desimal, kalkulator lot/pip (modal USD), dan tombol "Forex" di Screener. Data dari Yahoo Finance (tanpa volume).
+
+**Forex live:** saklar Auto-refresh (5-60 dtk) memperbarui grafik & skor tanpa spinner. Tombol "Indikator melayang" menampilkan kartu kecil (harga, BUY/SELL/NETRAL, jumlah teori hijau/merah, zona buy/sell + SL) di atas aplikasi lain; kartu memuat & menganalisis data sendiri sehingga tetap jalan saat aplikasi di latar belakang. Perlu izin "Tampil di atas aplikasi lain".

@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
 import 'analysis_page.dart';
+import 'fxlive.dart';
 import 'info_page.dart';
 import 'lists_pages.dart';
 import 'notifier.dart';
 import 'portfolio_page.dart';
 import 'store.dart';
 import 'updater.dart';
+
+/// Entry point jendela melayang (indikator forex di atas aplikasi lain).
+@pragma('vm:entry-point')
+void overlayMain() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(MaterialApp(
+      debugShowCheckedModeBanner: false, theme: ThemeData.dark(), home: const FxOverlay()));
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

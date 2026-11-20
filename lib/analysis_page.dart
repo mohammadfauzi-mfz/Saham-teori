@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'backtest.dart';
 import 'charts.dart';
 import 'fundauto.dart';
+import 'fxlive.dart';
 import 'service.dart';
 import 'data.dart';
 import 'indicators.dart';
@@ -16,7 +19,7 @@ class AnalysisPage extends StatefulWidget {
   State<AnalysisPage> createState() => AnalysisPageState();
 }
 
-class AnalysisPageState extends State<AnalysisPage> {
+class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver {
   final ctl = TextEditingController(text: 'BBCA');
   List<Candle> data = [];
   List<Signal> sigs = [];
@@ -41,6 +44,11 @@ class AnalysisPageState extends State<AnalysisPage> {
   bool oMA = true, oBB = true, oSR = true;
   bool pVol = true, pRSI = true, pMACD = true, pStoch = false, pADX = false;
   bool inWatch = false;
+  Timer? _timer;
+  bool autoOn = false, refreshing = false, overlayOn = false;
+  int autoSec = 10;
+  DateTime? lastUp;
+  String? autoErr;
 
   int get offset => off.round();
   bool get fx => isForex(loadedCode);
@@ -49,7 +57,106 @@ class AnalysisPageState extends State<AnalysisPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState s) {
+    if (s == AppLifecycleState.resumed) {
+      _restartTimer();
+      if (autoOn && fx) refreshQuiet();
+    } else {
+      _timer?.cancel();
+      _timer = null;
+    }
+  }
+
+  void _setAuto(bool on) {
+    setState(() => autoOn = on);
+    _restartTimer();
+    if (on) refreshQuiet();
+  }
+
+  void _restartTimer() {
+    _timer?.cancel();
+    _timer = null;
+    if (autoOn && fx) _timer = Timer.periodic(Duration(seconds: autoSec), (_) => refreshQuiet());
+  }
+
+  /// Refresh diam-diam (tanpa spinner), posisi geser/zoom grafik dipertahankan. Khusus forex.
+  Future<void> refreshQuiet() async {
+    if (refreshing || loading || data.isEmpty || !fx) return;
+    refreshing = true;
+    try {
+      final c = loadedCode, iv = interval;
+      final nd = await mergeRecent(data, c, iv);
+      if (!mounted || c != loadedCode || iv != interval || nd.length < 80) return;
+      final i = Indicators(nd);
+      swingOverride = loadedSwing;
+      final s = analyze(nd, i, Fund(), forex: true);
+      final added = nd.length - data.length;
+      setState(() {
+        if (off > 0 && added > 0) off += added; // tetap di candle yang sama saat melihat riwayat
+        data = nd;
+        ind = i;
+        sigs = s;
+        reco = recommend(nd, i, s);
+        recoS = recommendShort(nd, i, s);
+        sr = srLevels(i);
+        lastUp = DateTime.now();
+        autoErr = null;
+      });
+    } catch (_) {
+      if (mounted) setState(() => autoErr = 'Gagal refresh (koneksi/limit data)');
+    } finally {
+      refreshing = false;
+    }
+  }
+
+  Future<void> _syncOverlay() async {
+    if (!overlayOn || !fx) return;
+    try {
+      await FlutterOverlayWindow.shareData('$loadedCode|$interval|$autoSec');
+    } catch (_) {}
+  }
+
+  Future<void> toggleOverlay() async {
+    final msg = ScaffoldMessenger.of(context);
+    try {
+      if (overlayOn) {
+        await FlutterOverlayWindow.closeOverlay();
+        if (mounted) setState(() => overlayOn = false);
+        return;
+      }
+      var ok = await FlutterOverlayWindow.isPermissionGranted();
+      if (!ok) ok = (await FlutterOverlayWindow.requestPermission()) ?? false;
+      if (!ok) {
+        msg.showSnackBar(const SnackBar(content: Text('Izin "Tampil di atas aplikasi lain" diperlukan')));
+        return;
+      }
+      await FlutterOverlayWindow.showOverlay(
+          enableDrag: true,
+          overlayTitle: 'Saham Teori',
+          overlayContent: 'Indikator forex aktif',
+          alignment: OverlayAlignment.topRight,
+          height: 175,
+          width: 250);
+      if (mounted) setState(() => overlayOn = true);
+      for (final ms in [800, 1000, 1700]) {
+        await Future.delayed(Duration(milliseconds: ms));
+        await _syncOverlay();
+      }
+    } catch (e) {
+      msg.showSnackBar(SnackBar(content: Text('Jendela melayang gagal: $e')));
+    }
   }
 
   String get code => ctl.text.trim().toUpperCase().replaceAll('.JK', '');
@@ -90,11 +197,15 @@ class AnalysisPageState extends State<AnalysisPage> {
         off = -(count * 0.15);
         cross = null;
         inWatch = w.contains(code);
+        lastUp = DateTime.now();
+        autoErr = null;
       });
     } catch (e) {
       setState(() => err = 'Gagal memuat: $e');
     }
     setState(() => loading = false);
+    _restartTimer();
+    _syncOverlay();
   }
 
   Future<void> toggleWatch() async {
@@ -740,6 +851,34 @@ class AnalysisPageState extends State<AnalysisPage> {
                   selected: short,
                   onSelected: (_) => setState(() => short = true)),
             ]),
+          ],
+          if (fx) ...[
+            const SizedBox(height: 4),
+            Wrap(crossAxisAlignment: WrapCrossAlignment.center, spacing: 8, children: [
+              Switch(value: autoOn, onChanged: _setAuto),
+              const Text('Auto-refresh'),
+              DropdownButton<int>(
+                  value: autoSec,
+                  isDense: true,
+                  items: [
+                    for (final s in const [5, 10, 15, 30, 60]) DropdownMenuItem(value: s, child: Text('$s dtk'))
+                  ],
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() => autoSec = v);
+                    _restartTimer();
+                    _syncOverlay();
+                  }),
+              OutlinedButton.icon(
+                  onPressed: toggleOverlay,
+                  icon: Icon(overlayOn ? Icons.picture_in_picture : Icons.picture_in_picture_alt_outlined, size: 18),
+                  label: Text(overlayOn ? 'Tutup indikator melayang' : 'Indikator melayang')),
+            ]),
+            if (autoOn || lastUp != null)
+              Text(
+                  autoErr ??
+                      'Update terakhir ${lastUp == null ? '-' : hms(lastUp!)}${autoOn ? ' • otomatis tiap $autoSec dtk' : ''}',
+                  style: TextStyle(fontSize: 11, color: autoErr != null ? Colors.redAccent : Colors.white54)),
           ],
           const SizedBox(height: 8),
           if (loading) const LinearProgressIndicator(),
