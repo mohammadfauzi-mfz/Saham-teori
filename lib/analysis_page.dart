@@ -124,7 +124,7 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
   Future<void> _syncOverlay() async {
     if (!overlayOn || !fx) return;
     try {
-      await FlutterOverlayWindow.shareData('$loadedCode|$interval|$autoSec');
+      await FlutterOverlayWindow.shareData('$loadedCode|$interval|$autoSec|${Settings.ovStep}');
     } catch (_) {}
   }
 
@@ -147,8 +147,8 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
           overlayTitle: 'Saham Teori',
           overlayContent: 'Indikator forex aktif',
           alignment: OverlayAlignment.topRight,
-          height: 175,
-          width: 250);
+          height: ovH(ovWidths[Settings.ovStep]),
+          width: ovWidths[Settings.ovStep]);
       if (mounted) setState(() => overlayOn = true);
       for (final ms in [800, 1000, 1700]) {
         await Future.delayed(Duration(milliseconds: ms));
@@ -868,6 +868,25 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
                     setState(() => autoSec = v);
                     _restartTimer();
                     _syncOverlay();
+                  }),
+              DropdownButton<int>(
+                  value: Settings.ovStep,
+                  isDense: true,
+                  hint: const Text('Ukuran'),
+                  items: [
+                    for (var k = 0; k < ovWidths.length; k++)
+                      DropdownMenuItem(value: k, child: Text('Ukuran: ${ovNames[k]}'))
+                  ],
+                  onChanged: (v) async {
+                    if (v == null) return;
+                    setState(() => Settings.ovStep = v);
+                    await Settings.save();
+                    if (overlayOn) {
+                      try {
+                        await FlutterOverlayWindow.resizeOverlay(ovWidths[v], ovH(ovWidths[v]));
+                      } catch (_) {}
+                      _syncOverlay();
+                    }
                   }),
               OutlinedButton.icon(
                   onPressed: toggleOverlay,

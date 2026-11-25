@@ -15,6 +15,11 @@ Future<List<Candle>> mergeRecent(List<Candle> d, String code, String iv) async {
   return [...d.where((c) => c.t.isBefore(t0)), ...r];
 }
 
+/// Pilihan lebar jendela melayang (dp); tinggi = 70% lebar.
+const ovWidths = [250, 300, 360, 430, 500];
+const ovNames = ['Kecil', 'Sedang', 'Besar', 'Lebih besar', 'Maksimal'];
+int ovH(int w) => (w * 0.7).round();
+
 class FxSnap {
   final double price, chg, buyIdeal, buyStop, sellIdeal, sellStop;
   final int bull, bear, total;
@@ -58,6 +63,8 @@ class _FxOverlayState extends State<FxOverlay> {
   String? err;
   Timer? timer;
   bool busy = false;
+  int step = Settings.ovStep;
+  String lastMainStep = '';
   StreamSubscription? sub;
 
   @override
@@ -77,6 +84,10 @@ class _FxOverlayState extends State<FxOverlay> {
   void _onData(dynamic e) {
     final p = e.toString().split('|');
     if (p.length < 3) return;
+    if (p.length > 3 && p[3] != lastMainStep) {
+      lastMainStep = p[3];
+      step = (int.tryParse(p[3]) ?? step).clamp(0, ovWidths.length - 1).toInt();
+    }
     final s = (int.tryParse(p[2]) ?? 10).clamp(3, 120).toInt();
     if (p[0] == code && p[1] == iv && s == sec && snap != null) return;
     if (p[0] != code || p[1] != iv) {
@@ -87,6 +98,15 @@ class _FxOverlayState extends State<FxOverlay> {
     iv = p[1];
     sec = s;
     _restart();
+  }
+
+  void _resize(int delta) {
+    final n = (step + delta).clamp(0, ovWidths.length - 1).toInt();
+    if (n == step) return;
+    setState(() => step = n);
+    try {
+      FlutterOverlayWindow.resizeOverlay(ovWidths[n], ovH(ovWidths[n]));
+    } catch (_) {}
   }
 
   void _restart() {
@@ -139,7 +159,7 @@ class _FxOverlayState extends State<FxOverlay> {
                 child: Text(err ?? 'Memuat $code...',
                     style: const TextStyle(color: Colors.white70, fontSize: 13)))
             : FittedBox(
-                fit: BoxFit.scaleDown,
+                fit: BoxFit.contain,
                 alignment: Alignment.topLeft,
                 child: SizedBox(
                   width: 232,
@@ -148,6 +168,16 @@ class _FxOverlayState extends State<FxOverlay> {
                       Expanded(
                           child: Text('$code · ${tfLabel(iv)}',
                               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white))),
+                      InkWell(
+                          onTap: () => _resize(-1),
+                          child: const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 4),
+                              child: Icon(Icons.remove_circle_outline, size: 20, color: Colors.white70))),
+                      InkWell(
+                          onTap: () => _resize(1),
+                          child: const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 4),
+                              child: Icon(Icons.add_circle_outline, size: 20, color: Colors.white70))),
                       InkWell(
                           onTap: () => FlutterOverlayWindow.closeOverlay(),
                           child: const Icon(Icons.close, size: 20, color: Colors.white70)),

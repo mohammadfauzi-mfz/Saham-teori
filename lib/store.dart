@@ -34,6 +34,7 @@ class Alert {
 }
 
 class Settings {
+  static int ovStep = 2; // ukuran jendela melayang (indeks ovWidths)
   static double swing = 0.05, stopAtr = 1.0, zoneAtr = 0.5, riskPct = 1.0, capital = 10000000, capitalUsd = 1000;
 
   static Future<void> load() async {
@@ -44,6 +45,7 @@ class Settings {
     riskPct = p.getDouble('s_risk') ?? riskPct;
     capital = p.getDouble('s_cap') ?? capital;
     capitalUsd = p.getDouble('s_capusd') ?? capitalUsd;
+    ovStep = p.getInt('s_ovstep') ?? ovStep;
   }
 
   static Future<void> save() async {
@@ -54,6 +56,7 @@ class Settings {
     await p.setDouble('s_risk', riskPct);
     await p.setDouble('s_cap', capital);
     await p.setDouble('s_capusd', capitalUsd);
+    await p.setInt('s_ovstep', ovStep);
   }
 }
 
