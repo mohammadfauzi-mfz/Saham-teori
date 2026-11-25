@@ -105,7 +105,7 @@ class _FxOverlayState extends State<FxOverlay> {
     if (n == step) return;
     setState(() => step = n);
     try {
-      FlutterOverlayWindow.resizeOverlay(ovWidths[n], ovH(ovWidths[n]));
+      FlutterOverlayWindow.resizeOverlay(ovWidths[n], ovH(ovWidths[n]), true);
     } catch (_) {}
   }
 

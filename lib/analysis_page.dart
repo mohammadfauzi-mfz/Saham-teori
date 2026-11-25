@@ -883,7 +883,7 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
                     await Settings.save();
                     if (overlayOn) {
                       try {
-                        await FlutterOverlayWindow.resizeOverlay(ovWidths[v], ovH(ovWidths[v]));
+                        await FlutterOverlayWindow.resizeOverlay(ovWidths[v], ovH(ovWidths[v]), true);
                       } catch (_) {}
                       _syncOverlay();
                     }
