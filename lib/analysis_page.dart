@@ -10,6 +10,7 @@ import 'fxlive.dart';
 import 'service.dart';
 import 'smc.dart';
 import 'data.dart';
+import 'deriv.dart';
 import 'indicators.dart';
 import 'store.dart';
 import 'theories.dart';
@@ -883,7 +884,7 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
           SizedBox(
             height: 34,
             child: ListView(scrollDirection: Axis.horizontal, children: [
-              for (final p in forexPairs)
+              for (final p in [...forexPairs, ...derivSymbols.map((e) => e[0])])
                 Padding(
                     padding: const EdgeInsets.only(right: 6),
                     child: ActionChip(

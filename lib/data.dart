@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'deriv.dart';
 
 class Candle {
   final DateTime t;
@@ -48,7 +49,7 @@ const _ccy = {'USD', 'EUR', 'GBP', 'JPY', 'AUD', 'NZD', 'CAD', 'CHF', 'IDR', 'SG
 bool _isPair(String c) => c.length == 6 && _ccy.contains(c.substring(0, 3)) && _ccy.contains(c.substring(3));
 
 /// Pair mata uang atau emas/perak (bukan saham IDX).
-bool isForex(String c) => c == 'XAUUSD' || c == 'XAGUSD' || c.endsWith('=X') || _isPair(c);
+bool isForex(String c) => isDeriv(c) || c == 'XAUUSD' || c == 'XAGUSD' || c.endsWith('=X') || _isPair(c);
 
 String yahooSym(String code) {
   if (code.startsWith('^') || code.contains('=')) return code;
@@ -61,19 +62,21 @@ String yahooSym(String code) {
 /// Jumlah desimal harga untuk tampilan.
 int decFor(String code) {
   if (!isForex(code)) return 0;
+  if (isDeriv(code)) return derivDec[code] ?? 3;
   if (code.contains('JPY')) return 3;
   if (code.startsWith('XAU') || code.startsWith('XAG') || code.contains('IDR')) return 2;
   return 5;
 }
 
-double pipSize(String code) =>
-    code.contains('JPY') ? 0.01 : (code.startsWith('XAU') ? 0.1 : (code.contains('IDR') ? 1.0 : 0.0001));
+double pipSize(String code) => isDeriv(code)
+    ? 1.0
+    : code.contains('JPY') ? 0.01 : (code.startsWith('XAU') ? 0.1 : (code.contains('IDR') ? 1.0 : 0.0001));
 
 double contractSize(String code) => code.startsWith('XAU') ? 100 : 100000;
 
 /// Nilai 1 unit mata uang kuotasi dalam USD (untuk konversi nilai pip). null jika gagal.
 Future<double?> usdPerQuote(String code, double price) async {
-  if (code.startsWith('XAU') || code.startsWith('XAG')) return 1;
+  if (isDeriv(code) || code.startsWith('XAU') || code.startsWith('XAG')) return 1;
   final s = code.replaceAll('=X', '');
   if (s.length < 6) return null;
   final base = s.substring(0, 3), quote = s.substring(3, 6);
@@ -113,6 +116,7 @@ List<Candle> aggregate4h(List<Candle> h) {
 }
 
 Future<List<Candle>> fetchCandles(String code, {String range = '2y', String interval = '1d'}) async {
+  if (isDeriv(code)) return fetchDeriv(code, range: range, interval: interval);
   if (interval == '4h') return aggregate4h(await _fetchRaw(code, range: range, interval: '60m'));
   return _fetchRaw(code, range: range, interval: interval);
 }
