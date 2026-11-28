@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'data.dart';
+import 'signals.dart';
 import 'store.dart';
 
 final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
@@ -13,6 +14,9 @@ Future<void> backgroundTarget() async {
   DartPluginRegistrant.ensureInitialized();
   try {
     await Notifier.backgroundCheck();
+  } catch (_) {}
+  try {
+    await Signals.backgroundCheck();
   } catch (_) {}
 }
 
@@ -26,7 +30,16 @@ class Notifier {
   static Future<void> init() async {
     await _initPlugin();
     await AndroidAlarmManager.initialize();
-    if (await Store.notifOn()) await schedule();
+    await reschedule();
+  }
+
+  /// Alarm aktif selama notifikasi portofolio ATAU sinyal menyala.
+  static Future<void> reschedule() async {
+    if (await Store.notifOn() || await Signals.on()) {
+      await schedule();
+    } else {
+      await cancel();
+    }
   }
 
   static Future<bool> requestPermission() async {
@@ -45,12 +58,8 @@ class Notifier {
   /// Aktif/nonaktifkan notifikasi + simpan target (% untung total portofolio).
   static Future<void> configure({required bool on, required double target}) async {
     await Store.setNotif(on: on, target: target, fired: false);
-    if (on) {
-      await requestPermission();
-      await schedule();
-    } else {
-      await cancel();
-    }
+    if (on) await requestPermission();
+    await reschedule();
   }
 
   /// Dipanggil dengan P/L% portofolio saat ini. Notifikasi dikirim sekali saat target tercapai,

@@ -351,3 +351,16 @@ Smc? analyzeSmc(List<Candle> d, {int k = 3}) {
   return Smc(trend, price, atr, breaks.length > 6 ? breaks.sublist(breaks.length - 6) : breaks, obsKeep, fvKeep,
       liq, sweep, sweepBull, eq, rHi, rLo, pd, setup, note);
 }
+
+/// Kesimpulan satu-dua kalimat dari hasil SMC.
+String smcConclusion(Smc s) {
+  final u = s.setup;
+  final bias = s.trend == 1 ? 'BUY' : (s.trend == -1 ? 'SELL' : null);
+  if (bias == null) return 'Struktur belum jelas, sebaiknya tunggu.';
+  final good = (s.trend == 1 && s.zoneName == 'Discount') || (s.trend == -1 && s.zoneName == 'Premium');
+  final zone = s.zoneName == 'Equilibrium' ? 'di tengah range' : 'di zona ${s.zoneName}';
+  if (u == null) return 'Bias $bias (struktur ${s.trendName}), harga $zone. Belum ada setup, tunggu pullback ke zona.';
+  final where = u.inZone ? 'harga sudah di zona setup, tunggu candle konfirmasi' : 'tunggu harga pullback ke zona ${u.lo.toStringAsFixed(priceDec)}–${u.hi.toStringAsFixed(priceDec)}';
+  final align = u.buy == (s.trend == 1) ? (good ? 'searah struktur & zona ideal' : 'searah struktur') : 'melawan struktur (hati-hati)';
+  return 'Bias $bias, $align, harga $zone. $where. RR 1:${u.rr.toStringAsFixed(1)}.';
+}

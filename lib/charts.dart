@@ -13,6 +13,26 @@ void _txt(Canvas c, String s, Offset o) {
   tp.paint(c, o);
 }
 
+final List<Rect> _placed = [];
+
+/// Label yang bergeser ke bawah bila menabrak label lain; dilewati jika tetap tidak muat.
+void _txtP(Canvas c, String s, Offset o) {
+  final tp = TextPainter(
+      text: TextSpan(text: s, style: const TextStyle(color: Colors.white70, fontSize: 10)),
+      textDirection: TextDirection.ltr)
+    ..layout();
+  var y = o.dy;
+  for (var i = 0; i < 6; i++) {
+    final r = Rect.fromLTWH(o.dx, y, tp.width, tp.height).inflate(0.5);
+    if (!_placed.any((p) => p.overlaps(r))) {
+      _placed.add(r);
+      tp.paint(c, Offset(o.dx, y));
+      return;
+    }
+    y += tp.height + 1;
+  }
+}
+
 void _line(Canvas canvas, List<double> s, int st, int end, double Function(int) x,
     double Function(double) y, Color color) {
   final path = Path();
@@ -108,6 +128,7 @@ class PricePainter extends CustomPainter {
     final pad = (mx - mn) * 0.03;
     mn -= pad;
     mx += pad;
+    _placed.clear();
     final cw = size.width / cnt;
     double x(int i) => (i - st + 0.5) * cw;
     double y(double v) => size.height * (1 - (v - mn) / (mx - mn));
@@ -116,7 +137,7 @@ class PricePainter extends CustomPainter {
       final v = mn + (mx - mn) * k / 4;
       final yy = y(v);
       canvas.drawLine(Offset(0, yy), Offset(size.width, yy), grid);
-      _txt(canvas, f0(v), Offset(2, yy - 12));
+      _txtP(canvas, f0(v), Offset(2, yy - 12));
     }
     if (reco != null) {
       canvas.drawRect(Rect.fromLTRB(0, y(reco!.buyHigh), size.width, y(reco!.buyLow)),
@@ -127,8 +148,8 @@ class PricePainter extends CustomPainter {
           Paint()
             ..color = Colors.redAccent
             ..strokeWidth = 1);
-      _txt(canvas, zoneLabel, Offset(size.width - 50, y(reco!.buyHigh) + 1));
-      _txt(canvas, 'Stop', Offset(size.width - 28, y(reco!.stop) - 12));
+      _txtP(canvas, zoneLabel, Offset(size.width - 50, y(reco!.buyHigh) + 1));
+      _txtP(canvas, 'Stop', Offset(size.width - 28, y(reco!.stop) - 12));
     }
     if (oSR) {
       final last = d.last.c;
@@ -138,7 +159,7 @@ class PricePainter extends CustomPainter {
             Paint()
               ..color = col.withOpacity(0.35)
               ..strokeWidth = 1);
-        _txt(canvas, v > last ? 'R ${f0(v)}' : 'S ${f0(v)}', Offset(size.width - 62, y(v) - 11));
+        _txtP(canvas, v > last ? 'R ${f0(v)}' : 'S ${f0(v)}', Offset(size.width - 62, y(v) - 11));
       }
     }
     final sm = smc;
@@ -151,7 +172,7 @@ class PricePainter extends CustomPainter {
         final x0 = z.from < st ? 0.0 : x(z.from);
         canvas.drawRect(Rect.fromLTRB(x0, y(z.hi), size.width, y(z.lo)),
             Paint()..color = col.withOpacity(z.kind == 'OB' ? 0.22 : 0.14));
-        _txt(canvas, '${z.kind}${z.bull ? '+' : '-'}', Offset(math.max(2.0, x0 + 2), y(z.hi) + 1));
+        _txtP(canvas, '${z.kind}${z.bull ? '+' : '-'}', Offset(math.max(2.0, x0 + 2), y(z.hi) + 1));
       }
       for (final b in sm.breaks) {
         if (b.to < st || b.from >= end) continue;
@@ -160,20 +181,20 @@ class PricePainter extends CustomPainter {
         final x0 = b.from < st ? 0.0 : x(b.from);
         final x1 = b.to >= end ? size.width : x(b.to);
         _dash(canvas, Offset(x0, yy), Offset(x1, yy), b.bull ? Colors.greenAccent : Colors.redAccent);
-        _txt(canvas, b.label, Offset((x0 + x1) / 2 - 14, yy - 12));
+        _txtP(canvas, b.label, Offset((x0 + x1) / 2 - 14, yy - 12));
       }
       for (final q in sm.liq) {
         final yy = y(q.p);
         if (yy < 0 || yy > size.height) continue;
         final x0 = q.i < st ? 0.0 : x(q.i);
         _dash(canvas, Offset(x0, yy), Offset(size.width, yy), Colors.amber);
-        _txt(canvas, q.high ? 'EQH' : 'EQL', Offset(size.width - 28, yy - 12));
+        _txtP(canvas, q.high ? 'EQH' : 'EQL', Offset(size.width - 28, yy - 12));
       }
       if (sm.eq != null) {
         final yy = y(sm.eq!);
         if (yy >= 0 && yy <= size.height) {
           _dash(canvas, Offset(0, yy), Offset(size.width, yy), Colors.white54);
-          _txt(canvas, 'EQ', Offset(size.width - 16, yy - 12));
+          _txtP(canvas, 'EQ', Offset(size.width - 16, yy - 12));
         }
       }
       final su = sm.setup;
@@ -186,7 +207,7 @@ class PricePainter extends CustomPainter {
           final yy = y(e[0] as double);
           if (yy < 0 || yy > size.height) continue;
           _dash(canvas, Offset(size.width * 0.55, yy), Offset(size.width, yy), e[2] as Color);
-          _txt(canvas, e[1] as String, Offset(size.width * 0.55, yy - 12));
+          _txtP(canvas, e[1] as String, Offset(size.width * 0.55, yy - 12));
         }
       }
     }

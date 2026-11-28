@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'data.dart';
 import 'service.dart';
+import 'signals_page.dart';
 import 'store.dart';
 import 'theories.dart';
 
@@ -163,6 +164,10 @@ class WatchlistPageState extends State<WatchlistPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Watchlist'), actions: [
+        IconButton(
+            tooltip: 'Notifikasi sinyal',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SignalsPage())),
+            icon: const Icon(Icons.notifications_active_outlined)),
         IconButton(onPressed: loading ? null : refresh, icon: const Icon(Icons.refresh)),
       ]),
       body: SafeArea(

@@ -623,6 +623,13 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('Smart Money Concept (SMC)', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(8),
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(color: col.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+            child: Text('Kesimpulan: ${smcConclusion(s)}', style: TextStyle(fontSize: 13, color: col)),
+          ),
           Text(
               'Struktur: ${s.trendName}'
               '${b == null ? '' : ' • ${b.label} ${b.bull ? 'bullish' : 'bearish'} di ${f0(b.p)} (${n - 1 - b.to} candle lalu)'}',
