@@ -24,12 +24,13 @@ const tfList = [
   ['15m', '15 mnt', '60d'],
   ['30m', '30 mnt', '60d'],
   ['60m', '1 jam', '6mo'],
+  ['4h', '4 jam', '1y'],
   ['1d', 'Harian', '2y'],
   ['1wk', 'Mingguan', '5y'],
 ];
 String rangeFor(String iv) => tfList.firstWhere((e) => e[0] == iv, orElse: () => tfList[5])[2];
 String tfLabel(String iv) => tfList.firstWhere((e) => e[0] == iv, orElse: () => tfList[5])[1];
-bool isIntraday(String iv) => iv.endsWith('m');
+bool isIntraday(String iv) => iv.endsWith('m') || iv == '4h';
 
 const popular = [
   'BBCA', 'BBRI', 'BMRI', 'BBNI', 'TLKM', 'ASII', 'UNVR', 'ICBP', 'INDF', 'KLBF',
@@ -89,7 +90,34 @@ Future<double?> usdPerQuote(String code, double price) async {
   return null;
 }
 
-Future<List<Candle>> fetchCandles(String code,
+/// Offset zona waktu server broker (jam dari UTC) untuk batas candle H4. GMT+2 = musim dingin
+/// (kebanyakan broker MT5); ganti 3 saat musim panas/DST AS.
+const h4ServerOffsetHours = 2;
+
+/// Yahoo tidak punya interval 4 jam: susun dari candle 1 jam.
+List<Candle> aggregate4h(List<Candle> h) {
+  final out = <Candle>[];
+  int? cur;
+  for (final c in h) {
+    final b = (c.t.millisecondsSinceEpoch ~/ 1000 + h4ServerOffsetHours * 3600) ~/ 14400;
+    if (cur == b && out.isNotEmpty) {
+      final p = out.last;
+      out[out.length - 1] = Candle(p.t, p.o, c.h > p.h ? c.h : p.h, c.l < p.l ? c.l : p.l, c.c, p.v + c.v);
+    } else {
+      cur = b;
+      out.add(Candle(
+          DateTime.fromMillisecondsSinceEpoch((b * 14400 - h4ServerOffsetHours * 3600) * 1000), c.o, c.h, c.l, c.c, c.v));
+    }
+  }
+  return out;
+}
+
+Future<List<Candle>> fetchCandles(String code, {String range = '2y', String interval = '1d'}) async {
+  if (interval == '4h') return aggregate4h(await _fetchRaw(code, range: range, interval: '60m'));
+  return _fetchRaw(code, range: range, interval: interval);
+}
+
+Future<List<Candle>> _fetchRaw(String code,
     {String range = '2y', String interval = '1d'}) async {
   final sym = yahooSym(code);
   final url = Uri.parse(

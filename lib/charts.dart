@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'data.dart';
 import 'indicators.dart';
+import 'smc.dart';
 import 'theories.dart';
 
 void _txt(Canvas c, String s, Offset o) {
@@ -42,6 +43,18 @@ List<int> _rng(int n, int count, int offset) {
   return [end - count, end];
 }
 
+void _dash(Canvas c, Offset a, Offset b, Color col) {
+  if (b.dx <= a.dx) return;
+  final p = Paint()
+    ..color = col.withOpacity(0.85)
+    ..strokeWidth = 1;
+  var x0 = a.dx;
+  while (x0 < b.dx) {
+    c.drawLine(Offset(x0, a.dy), Offset(math.min(x0 + 5, b.dx), a.dy), p);
+    x0 += 9;
+  }
+}
+
 class PricePainter extends CustomPainter {
   final List<Candle> d;
   final Indicators ind;
@@ -51,6 +64,8 @@ class PricePainter extends CustomPainter {
   final List<double> sr;
   final int? cross;
   final String zoneLabel;
+  final Smc? smc;
+  final bool oSMC;
   PricePainter(
       {required this.d,
       required this.ind,
@@ -62,6 +77,8 @@ class PricePainter extends CustomPainter {
       this.oSR = true,
       this.sr = const [],
       this.zoneLabel = 'Zona beli',
+      this.smc,
+      this.oSMC = true,
       this.cross});
 
   @override
@@ -122,6 +139,55 @@ class PricePainter extends CustomPainter {
               ..color = col.withOpacity(0.35)
               ..strokeWidth = 1);
         _txt(canvas, v > last ? 'R ${f0(v)}' : 'S ${f0(v)}', Offset(size.width - 62, y(v) - 11));
+      }
+    }
+    final sm = smc;
+    if (sm != null && oSMC) {
+      for (final z in [...sm.obs, ...sm.fvgs]) {
+        if (z.hi < mn || z.lo > mx) continue;
+        final col = z.kind == 'OB'
+            ? (z.bull ? Colors.tealAccent : Colors.pinkAccent)
+            : (z.bull ? Colors.lightBlueAccent : Colors.orangeAccent);
+        final x0 = z.from < st ? 0.0 : x(z.from);
+        canvas.drawRect(Rect.fromLTRB(x0, y(z.hi), size.width, y(z.lo)),
+            Paint()..color = col.withOpacity(z.kind == 'OB' ? 0.22 : 0.14));
+        _txt(canvas, '${z.kind}${z.bull ? '+' : '-'}', Offset(math.max(2.0, x0 + 2), y(z.hi) + 1));
+      }
+      for (final b in sm.breaks) {
+        if (b.to < st || b.from >= end) continue;
+        final yy = y(b.p);
+        if (yy < 0 || yy > size.height) continue;
+        final x0 = b.from < st ? 0.0 : x(b.from);
+        final x1 = b.to >= end ? size.width : x(b.to);
+        _dash(canvas, Offset(x0, yy), Offset(x1, yy), b.bull ? Colors.greenAccent : Colors.redAccent);
+        _txt(canvas, b.label, Offset((x0 + x1) / 2 - 14, yy - 12));
+      }
+      for (final q in sm.liq) {
+        final yy = y(q.p);
+        if (yy < 0 || yy > size.height) continue;
+        final x0 = q.i < st ? 0.0 : x(q.i);
+        _dash(canvas, Offset(x0, yy), Offset(size.width, yy), Colors.amber);
+        _txt(canvas, q.high ? 'EQH' : 'EQL', Offset(size.width - 28, yy - 12));
+      }
+      if (sm.eq != null) {
+        final yy = y(sm.eq!);
+        if (yy >= 0 && yy <= size.height) {
+          _dash(canvas, Offset(0, yy), Offset(size.width, yy), Colors.white54);
+          _txt(canvas, 'EQ', Offset(size.width - 16, yy - 12));
+        }
+      }
+      final su = sm.setup;
+      if (su != null) {
+        for (final e in [
+          [su.entry, 'Entry', Colors.cyanAccent],
+          [su.sl, 'SL', Colors.redAccent],
+          [su.tp1, 'TP1', Colors.greenAccent],
+        ]) {
+          final yy = y(e[0] as double);
+          if (yy < 0 || yy > size.height) continue;
+          _dash(canvas, Offset(size.width * 0.55, yy), Offset(size.width, yy), e[2] as Color);
+          _txt(canvas, e[1] as String, Offset(size.width * 0.55, yy - 12));
+        }
       }
     }
     if (oBB) {

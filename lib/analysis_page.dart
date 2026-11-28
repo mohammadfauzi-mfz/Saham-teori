@@ -8,6 +8,7 @@ import 'charts.dart';
 import 'fundauto.dart';
 import 'fxlive.dart';
 import 'service.dart';
+import 'smc.dart';
 import 'data.dart';
 import 'indicators.dart';
 import 'store.dart';
@@ -41,7 +42,8 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
   double _pinchDist = 0;
   int _pinchBase = 120;
   bool pinching = false;
-  bool oMA = true, oBB = true, oSR = true;
+  bool oMA = true, oBB = true, oSR = true, oSMC = true;
+  Smc? smc;
   bool pVol = true, pRSI = true, pMACD = true, pStoch = false, pADX = false;
   bool inWatch = false;
   Timer? _timer;
@@ -110,6 +112,7 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
         sigs = s;
         reco = recommend(nd, i, s);
         recoS = recommendShort(nd, i, s);
+        smc = analyzeSmc(nd);
         sr = srLevels(i);
         lastUp = DateTime.now();
         autoErr = null;
@@ -189,6 +192,7 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
         sigs = s;
         reco = recommend(d, i, s);
         recoS = isFx ? recommendShort(d, i, s) : null;
+        smc = isFx ? analyzeSmc(d) : null;
         short = false;
         loadedCode = code;
         priceDec = decFor(code);
@@ -333,9 +337,10 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
             }));
   }
 
-  Future<void> calcFx() async {
+  Future<void> calcFx({SmcSetup? su}) async {
     final r = cur;
     if (r == null) return;
+    final entry = su?.entry ?? r.ideal, slP = su?.sl ?? r.stop, t1P = su?.tp1 ?? r.t1;
     final c = loadedCode;
     final usdQ = await usdPerQuote(c, r.price);
     if (!mounted) return;
@@ -343,21 +348,21 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
     final pipVal = pip * contractSize(c) * (usdQ ?? 0); // USD per pip per 1 lot
     final cap = TextEditingController(text: Settings.capitalUsd.toStringAsFixed(0));
     final risk = TextEditingController(text: Settings.riskPct.toString());
-    final sh = short;
+    final sh = su != null ? !su.buy : short;
     await showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         builder: (_) => StatefulBuilder(builder: (ctx, set) {
               final cp = double.tryParse(cap.text.trim().replaceAll(',', '.')) ?? 0;
               final rk = double.tryParse(risk.text.trim().replaceAll(',', '.')) ?? 0;
-              final stopPips = (r.ideal - r.stop).abs() / pip;
-              final t1Pips = (r.t1 - r.ideal).abs() / pip;
+              final stopPips = (entry - slP).abs() / pip;
+              final t1Pips = (t1P - entry).abs() / pip;
               var lots = 0.0;
               if (pipVal > 0 && stopPips > 0) lots = ((cp * rk / 100) / (stopPips * pipVal) * 100).floor() / 100;
               return Padding(
                 padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(ctx).viewInsets.bottom + 16),
                 child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Kalkulator Lot Forex $c', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text('Kalkulator Lot Forex $c${su != null ? ' (setup SMC)' : ''}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 8),
                   TextField(
                       controller: cap,
@@ -378,7 +383,7 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
                           isDense: true),
                       onChanged: (_) => set(() {})),
                   const SizedBox(height: 12),
-                  Text('${sh ? 'Jual (short)' : 'Beli (long)'} di ${f0(r.ideal)}, stop ${f0(r.stop)} '
+                  Text('${sh ? 'Jual (short)' : 'Beli (long)'} di ${f0(entry)}, stop ${f0(slP)} '
                       '(${stopPips.toStringAsFixed(1)} pip)'),
                   Text('Ukuran posisi: ${lots.toStringAsFixed(2)} lot',
                       style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -594,6 +599,69 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
       visualDensity: VisualDensity.compact,
       onSelected: (x) => setState(() => f(x)));
 
+  Widget smcCard(Smc s) {
+    final n = data.length;
+    final price = s.price;
+    const st = TextStyle(fontSize: 13);
+    final b = s.breaks.isEmpty ? null : s.breaks.last;
+    SmcZone? near(List<SmcZone> l, bool bull) {
+      final x = l.where((z) => z.bull == bull).toList();
+      if (x.isEmpty) return null;
+      x.sort((a, c) => (((a.lo + a.hi) / 2) - price).abs().compareTo((((c.lo + c.hi) / 2) - price).abs()));
+      return x.first;
+    }
+
+    String zl(SmcZone? z) => z == null ? '-' : '${f0(z.lo)} – ${f0(z.hi)}';
+    final up = s.liq.where((q) => q.high && q.p > price).toList()..sort((a, c) => a.p.compareTo(c.p));
+    final dn = s.liq.where((q) => !q.high && q.p < price).toList()..sort((a, c) => c.p.compareTo(a.p));
+    final su = s.setup;
+    final col = s.trend == 1 ? Colors.greenAccent : (s.trend == -1 ? Colors.redAccent : Colors.amber);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('Smart Money Concept (SMC)', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Text(
+              'Struktur: ${s.trendName}'
+              '${b == null ? '' : ' • ${b.label} ${b.bull ? 'bullish' : 'bearish'} di ${f0(b.p)} (${n - 1 - b.to} candle lalu)'}',
+              style: TextStyle(fontSize: 13, color: col, fontWeight: FontWeight.bold)),
+          if (s.pd != null)
+            Text('Zona harga: ${s.zoneName} (${s.pd!.toStringAsFixed(0)}% dari range 100 candle, EQ ${f0(s.eq!)})',
+                style: st),
+          Text('Order Block bullish: ${zl(near(s.obs, true))}', style: st),
+          Text('Order Block bearish: ${zl(near(s.obs, false))}', style: st),
+          Text('FVG bullish: ${zl(near(s.fvgs, true))}', style: st),
+          Text('FVG bearish: ${zl(near(s.fvgs, false))}', style: st),
+          Text(
+              'Likuiditas: EQH ${up.isEmpty ? '-' : f0(up.first.p)} • EQL ${dn.isEmpty ? '-' : f0(dn.first.p)}',
+              style: st),
+          if (s.sweep != null) Text(s.sweep!, style: const TextStyle(fontSize: 13, color: Colors.amber)),
+          const Divider(height: 18),
+          if (su != null) ...[
+            Text('Setup ${su.buy ? 'BUY' : 'SELL'} (${su.ref} ${su.buy ? 'bullish' : 'bearish'})',
+                style: TextStyle(fontWeight: FontWeight.bold, color: su.buy ? Colors.greenAccent : Colors.redAccent)),
+            Text('Zona: ${f0(su.lo)} – ${f0(su.hi)}${su.inZone ? '  (harga sedang di zona)' : ''}', style: st),
+            Text('Entry ${f0(su.entry)} (tengah zona${su.inZone ? '' : ', limit order'}) • SL ${f0(su.sl)}', style: st),
+            Text('TP1 ${f0(su.tp1)} • TP2 ${f0(su.tp2)} • RR ke TP1 1:${su.rr.toStringAsFixed(1)}', style: st),
+            if (su.note.isNotEmpty) Text('Catatan: ${su.note}', style: const TextStyle(fontSize: 12, color: Colors.white70)),
+            const SizedBox(height: 6),
+            OutlinedButton.icon(
+                onPressed: () => calcFx(su: su),
+                icon: const Icon(Icons.calculate, size: 18),
+                label: const Text('Hitung lot dari setup SMC')),
+          ] else
+            Text(s.setupNote, style: st),
+          const SizedBox(height: 6),
+          const Text(
+              'Deteksi SMC bersifat heuristik algoritmik (fractal swing 3 candle), bisa berbeda dari tafsir manual. '
+              'Gunakan konfirmasi timeframe lebih tinggi. Bukan rekomendasi investasi.',
+              style: TextStyle(fontSize: 11, color: Colors.white38)),
+        ]),
+      ),
+    );
+  }
+
   Widget recoCard(Reco r) {
     final sh = fx && short;
     final z = sh ? 'jual' : 'beli';
@@ -736,6 +804,8 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
                   oMA: oMA,
                   oBB: oBB,
                   oSR: oSR,
+                  smc: fx ? smc : null,
+                  oSMC: oSMC,
                   sr: sr,
                   cross: cross),
             ),
@@ -935,6 +1005,7 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
                   label: const Text('Ke portofolio')),
             ]),
             if (r != null) ...[const SizedBox(height: 8), recoCard(r)],
+            if (fx && smc != null) ...[const SizedBox(height: 8), smcCard(smc!)],
           ],
           if (i != null) ...[
             const SizedBox(height: 8),
@@ -942,6 +1013,7 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
               fc('MA', oMA, (v) => oMA = v),
               fc('Bollinger', oBB, (v) => oBB = v),
               fc('S/R', oSR, (v) => oSR = v),
+              if (fx) fc('SMC', oSMC, (v) => oSMC = v),
               if (!fx) fc('Volume', pVol, (v) => pVol = v),
               fc('RSI', pRSI, (v) => pRSI = v),
               fc('MACD', pMACD, (v) => pMACD = v),

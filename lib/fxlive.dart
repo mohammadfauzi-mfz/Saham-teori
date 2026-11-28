@@ -3,13 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'data.dart';
 import 'indicators.dart';
+import 'smc.dart';
 import 'store.dart';
 import 'theories.dart';
 
 /// Ambil candle terbaru saja lalu gabungkan ke data lama (hemat data untuk auto-refresh).
 Future<List<Candle>> mergeRecent(List<Candle> d, String code, String iv) async {
   final rc = isIntraday(iv) ? '1d' : (iv == '1wk' ? '3mo' : '5d');
-  final r = await fetchCandles(code, range: rc, interval: iv);
+  var r = await fetchCandles(code, range: iv == '4h' ? '5d' : rc, interval: iv);
+  if (iv == '4h' && r.length > 2) r = r.sublist(1); // bucket pertama dari jendela 5 hari bisa tidak lengkap
   if (r.isEmpty) return d;
   final t0 = r.first.t;
   return [...d.where((c) => c.t.isBefore(t0)), ...r];
@@ -18,14 +20,16 @@ Future<List<Candle>> mergeRecent(List<Candle> d, String code, String iv) async {
 /// Pilihan lebar jendela melayang (dp); tinggi = 70% lebar.
 const ovWidths = [250, 300, 360, 430, 500];
 const ovNames = ['Kecil', 'Sedang', 'Besar', 'Lebih besar', 'Maksimal'];
-int ovH(int w) => (w * 0.7).round();
+int ovH(int w) => (w * 0.85).round();
 
 class FxSnap {
   final double price, chg, buyIdeal, buyStop, sellIdeal, sellStop;
   final int bull, bear, total;
   final DateTime at;
+  final String smcLine, smcSetup;
   FxSnap(this.price, this.chg, this.buyIdeal, this.buyStop, this.sellIdeal, this.sellStop, this.bull,
-      this.bear, this.total, this.at);
+      this.bear, this.total, this.at,
+      {this.smcLine = '', this.smcSetup = ''});
   double get ratio => total == 0 ? 0 : bull / total;
   String get verdict => ratio >= 0.6 ? 'BUY' : (ratio <= 0.4 ? 'SELL' : 'NETRAL');
   Color get color => ratio >= 0.6 ? Colors.greenAccent : (ratio <= 0.4 ? Colors.redAccent : Colors.amber);
@@ -40,8 +44,19 @@ FxSnap fxSnapshot(List<Candle> d) {
   final bull = s.where((e) => e.ok).length;
   final n = d.length;
   final prev = d[n - 2].c;
+  final sm = analyzeSmc(d);
+  var line = '', setup = '';
+  if (sm != null) {
+    final b = sm.breaks.isEmpty ? '' : ' • ${sm.breaks.last.label}';
+    line = 'SMC ${sm.trendName}$b • ${sm.zoneName}';
+    final u = sm.setup;
+    if (u != null) {
+      setup = 'SMC ${u.buy ? 'Buy' : 'Sell'} ${f0(u.entry)}  SL ${f0(u.sl)}  TP ${f0(u.tp1)}${u.inZone ? '  (di zona)' : ''}';
+    }
+  }
   return FxSnap(d.last.c, prev == 0 ? 0 : (d.last.c - prev) / prev * 100, lr.ideal, lr.stop, sr.ideal, sr.stop,
-      bull, s.length - bull, s.length, DateTime.now());
+      bull, s.length - bull, s.length, DateTime.now(),
+      smcLine: line, smcSetup: setup);
 }
 
 String hms(DateTime t) =>
@@ -204,6 +219,11 @@ class _FxOverlayState extends State<FxOverlay> {
                         style: const TextStyle(fontSize: 11, color: Colors.greenAccent)),
                     Text('Sell ${f0(s.sellIdeal)}  SL ${f0(s.sellStop)}',
                         style: const TextStyle(fontSize: 11, color: Colors.redAccent)),
+                    if (s.smcLine.isNotEmpty)
+                      Text(s.smcLine,
+                          style: const TextStyle(fontSize: 11, color: Colors.lightBlueAccent, fontWeight: FontWeight.bold)),
+                    if (s.smcSetup.isNotEmpty)
+                      Text(s.smcSetup, style: const TextStyle(fontSize: 11, color: Colors.lightBlueAccent)),
                     Text('${hms(s.at)} • tiap $sec dtk${err != null ? ' • ⚠ $err' : ''}',
                         style: const TextStyle(fontSize: 10, color: Colors.white54)),
                   ]),
