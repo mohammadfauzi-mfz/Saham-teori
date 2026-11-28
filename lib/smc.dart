@@ -308,8 +308,11 @@ Smc? analyzeSmc(List<Candle> d, {int k = 3}) {
         return c != 0 ? c : (a.kind == 'OB' ? -1 : 1);
       });
       final z = cand.first;
-      final entry = (z.lo + z.hi) / 2;
-      final sl = buy ? z.lo - 0.25 * atr : z.hi + 0.25 * atr;
+      final inZone = price >= z.lo && price <= z.hi;
+      // Entry: harga sekarang jika sudah di zona, jika belum di tepi zona terdekat (lebih mudah terisi).
+      final entry = inZone ? price : (buy ? z.hi : z.lo);
+      // SL 1 ATR di luar sisi jauh zona agar tidak mudah tersapu wick.
+      final sl = buy ? z.lo - 1.0 * atr : z.hi + 1.0 * atr;
       final risk = (entry - sl).abs();
       if (risk <= 0) {
         note = 'Zona terlalu sempit untuk dihitung.';
@@ -335,7 +338,6 @@ Smc? analyzeSmc(List<Candle> d, {int k = 3}) {
         final tp1 = far.isNotEmpty ? far.first : (buy ? entry + 2 * risk : entry - 2 * risk);
         final nxt = far.where((t) => buy ? t > tp1 + 0.1 * atr : t < tp1 - 0.1 * atr).toList();
         final tp2 = nxt.isNotEmpty ? nxt.first : (buy ? tp1 + risk : tp1 - risk);
-        final inZone = price >= z.lo && price <= z.hi;
         final parts = <String>[];
         if (buy && pd > 55) parts.add('harga masih premium (${pd.toStringAsFixed(0)}%), idealnya buy di discount');
         if (!buy && pd < 45) parts.add('harga masih discount (${pd.toStringAsFixed(0)}%), idealnya sell di premium');

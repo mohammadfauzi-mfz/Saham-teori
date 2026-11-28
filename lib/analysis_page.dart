@@ -650,7 +650,16 @@ class AnalysisPageState extends State<AnalysisPage> with WidgetsBindingObserver 
             Text('Setup ${su.buy ? 'BUY' : 'SELL'} (${su.ref} ${su.buy ? 'bullish' : 'bearish'})',
                 style: TextStyle(fontWeight: FontWeight.bold, color: su.buy ? Colors.greenAccent : Colors.redAccent)),
             Text('Zona: ${f0(su.lo)} – ${f0(su.hi)}${su.inZone ? '  (harga sedang di zona)' : ''}', style: st),
-            Text('Entry ${f0(su.entry)} (tengah zona${su.inZone ? '' : ', limit order'}) • SL ${f0(su.sl)}', style: st),
+            Text(
+                su.inZone
+                    ? 'Entry ${f0(su.entry)} (harga sekarang, sudah di zona) • SL ${f0(su.sl)}'
+                    : 'Entry ${f0(su.entry)} (limit order di tepi zona) • SL ${f0(su.sl)}',
+                style: st),
+            if (!su.inZone)
+              Text(
+                  'Belum di zona: harga harus ${su.buy ? 'turun' : 'naik'} ${(su.entry - s.price).abs().toStringAsFixed(priceDec)} poin '
+                  '(${((su.entry - s.price).abs() / s.atr).toStringAsFixed(1)} ATR) dulu. Jangan entry sebelum tersentuh; bisa saja tidak pernah tersentuh.',
+                  style: const TextStyle(fontSize: 12, color: Colors.amber)),
             Text('TP1 ${f0(su.tp1)} • TP2 ${f0(su.tp2)} • RR ke TP1 1:${su.rr.toStringAsFixed(1)}', style: st),
             if (su.note.isNotEmpty) Text('Catatan: ${su.note}', style: const TextStyle(fontSize: 12, color: Colors.white70)),
             const SizedBox(height: 6),
